@@ -1,0 +1,1684 @@
+# 微软 Speech API 介绍
+
+现在的Windows上语音引擎有很多，但是很多引擎都是在线识别的，且都需要提供账号等才能免费识别。我们需要一个简单，免费的离线识别引擎，于是就想到了微软的语音引擎sapi，这个sapi是微软的经典语音引擎，虽然现在微软在推广它们的Azure新引擎，不过也是在线且不免费的。
+
+微软的语音引擎sapi是基于C++语言的COM标准的语音接口模块，它广泛用于之前的Windows系统的语音识别和其他的一些应用中。
+因为微软现在在使用Azure语音引擎，sapi它们就不再用了，所以现在无法在微软官网中下载，不过sapi已经作为Windows系统的api接口与其他接口一起提供了，所以只要安装了C++编译器，就会带sapi方面的源文件来供大家使用，和C++标准库一样，我们在编程时直接`#include <sapi.h>`就能使用sapi语音引擎。
+
+sapi语音引擎最后一个版本为5.4版本，微软虽然不再提供下载渠道，但是之前的教程还是存在，所以我们可以在[微软sapi 5.4教程](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125077(v=vs.85))中学习sapi的使用。
+
+接下来，我就要基于该教程在Windows10系统上来介绍sapi 5.4的使用。
+
+## 1.1 sapi入门
+
+### 1.11 sapi简述
+
+sapi是微软提供的语音模块，它是基于COM标准的模块，也就是COM组件，COM组件就是符合微软推行的COM标准的支持多个接口的组件。
+符合COM的模块继承了IUnknown接口中的几种虚函数，比如查询函数和引用计数函数。所以在使用这些模块的时候需要遵循COM组件的操作流程，比如要自己计数等。
+不过COM模块都可以使用于一个管理COM接口智能指针类`CComPtr`，它在头文件`sphelper.h`中。
+通过使用智能来使用接口，就可以避免自己手动来计数等操作，有关智能指针类`CComPtr`的用法，可以参考[微软CComPtr教程](https://docs.microsoft.com/zh-cn/cpp/atl/reference/ccomptr-class?view=msvc-160)。
+
+sapi接口是在应用层面与语音引擎层面的桥梁，因为它实现了控制与管理不同语音引擎操作等底层细节的功能，从而方便我们操作和管理语音引擎。
+
+![sapi_struct](image/2021-07-26-16-23-37.png)
+
+sapi作为一个语音模块，它提供基本两大语音模块功能：
+* 文字转语音(text to speech(TTS))
+* 语音识别(speech recognition(SR))
+
+基于这两大功能，sapi提供了多个接口和类来实现功能，其中根据功能，它们可以分为以下几类：
+* 应用级接口：
+  该类接口提供可以直接在我们自己的程序中直接使用的语音模块，我们不需要自己修改语音模型方面就能够直接使用。
+* 引擎级接口：
+  该类接口提供了一些底层的设备驱动接口(DDI)，可以让我们修改sapi中的语音模型或者使用自己的语音模型来达到引擎自定义的效果。
+* 相关的类：
+  以上的一些接口使用了某些结构类和枚举类型来实现一些功能，还定义了一些异常变量来提供各种错误信息。
+  微软还提供了一些辅助类来让我们方便使用和管理接口。
+* 相关杂项：
+  微软还提供了这些接口相关信息，如CLSID，类别ID等，还提供了一些简单的语音UI，以供查询使用。
+
+接下来的内容，我会先简单介绍下用sapi实现TTS和SR功能的流程，然后在详细介绍这些功能所需要用到的一些接口。
+
+### 1.12 实现TTS的流程
+
+实现TTS的核心接口就是`ISpVoice`接口，该接口既用于控制TTS引擎的各方面，也用于SAPI中的事件机制，所以对于TTS来说，只使用`ISpVoice`接口就能完成操作。
+
+该接口支持文本合成(也就是文本朗读，可以是字符串变量或者文本，支持XML文本)，也支持输出音频数据流到指定的输出设备(也就是音频朗读)。
+
+我们来可以设置其中的各种属性，如音量，语速等。
+`ISpVoice`接口还继承了sapi中的消息接口`ISpEventSource`，该接口是记录引擎各种事件的接口，所以我们可以根据不同的事件来进行操作。
+
+对于常规的TTS操作，一般是通过创建`ISpVoice`接口的对象，并对该对象设置各种属性，包括输出源(语音文本或音频数据流)，就可以完成TTS操作。
+因为是通过创建接口的对象(实例)来完成TTS的，所以同一个程序可以有多个实例来进行不同场景或方向的TTS，每个都是独立于其他的实例。
+
+实现TTS的流程大致为以下几个步骤：
+1. 创建`ISpVoice`的实例。
+2. 设置实例的各种属性，比如输出设备、语速、音量和语音文本等，此时就算完成了TTS操作的实现。
+3. 自己根据使用的场景，可以添加其他功能，也可以引入消息机制来对各种输入进行监听，实现各种语音输出，其中消息机制可以使用Win32 api中的消息循环，也可以用sapi中提供的消息机制或者事件机制来操作。
+
+以下是一个简单的TTS操作示例，实现了简单的文本转语音：
+```c++
+#include <sapi.h>
+#include <sphelper.h>
+#include <stdio.h>
+#include <string.h>
+#include <locale.h>
+
+// 输出执行记录
+void trace(const char* strs) { printf("%s\n", strs); }
+// 回调函数声明，用于消息循环，与Win32 api中的窗口过程函数类似
+void __stdcall callback_func(WPARAM wParam, LPARAM lParam);
+
+// TTS类，用于创建ISpVoice实例等操作
+struct Tts
+{
+    // ISpVoice的智能指针cpIspv
+    CComPtr<ISpVoice>cpIspv;
+    // 判断实例是否创建成功
+    bool create_success;
+    // 记录创建实例的数量
+    static unsigned create_count;
+    // 实例名称
+    char obj_name[88];
+    // 构造函数，用于创建ISpVoice的实例和设置各种参数
+    Tts(const wchar_t* vTkn, long rate, USHORT volume, SPVPRIORITY priority = SPVPRI_NORMAL) : create_success(true), obj_name{}
+    {
+        // 创建实例名称
+        char temp_str[10];
+        strcat(strcpy(obj_name, "tts_obj"), ultoa(++create_count, temp_str, 10));
+        // 创建ISpVoice实例，cpIspv指向该实例
+        HRESULT spv_hr = CoCreateInstance(CLSID_SpVoice, NULL, CLSCTX_ALL, IID_ISpVoice, (void**)&cpIspv);
+        // 判断实例是否创建成功
+        if (FAILED(spv_hr))
+        {
+            trace("TTS:\tcreate SpVoice failed!");
+            create_success = false;
+            return;
+        }
+        // 设置实例输出源
+        cpIspv->SetOutput(NULL, TRUE);
+        // 获取ISpVoice相关的声音资源
+        CComPtr<ISpObjectToken> cpSpvToken;
+        HRESULT spvTkn_hr = SpFindBestToken(SPCAT_VOICES, vTkn, L"Vendor=VoiceVendor1", &cpSpvToken);
+        if (FAILED(spvTkn_hr))
+        {
+            trace("TTS:\tget Voice Token failed!");
+            create_success = false;
+            return;
+        }
+        // 设置实例的声音
+        cpIspv->SetVoice(cpSpvToken);
+        // 设置实例语速
+        cpIspv->SetRate(rate);
+        // 设置实例音量
+        cpIspv->SetVolume(volume);
+        // 设置实例输出语音的优先级
+        cpIspv->SetPriority(priority);
+        // 设置实例相关联的回调函数
+        cpIspv->SetNotifyCallbackFunction(callback_func, 0, 0);
+        // 设置实例所需要关注的消息
+        ULONGLONG ullMyevnt = SPFEI(SPEI_START_INPUT_STREAM) | SPFEI(SPEI_END_INPUT_STREAM) | SPFEI(SPEI_WORD_BOUNDARY);
+        cpIspv->SetInterest(ullMyevnt, ullMyevnt);
+    }
+    // 设置实例语音文本及其输出方式
+    HRESULT speaking(const wchar_t* text, DWORD dwflags = SPF_ASYNC)
+    {
+        cpIspv->Speak(L"the speaking will start right now.", dwflags, NULL);
+        printf("%s:\tWord1: the speaking will start right now.\n", obj_name);
+        cpIspv->Speak(text, dwflags, NULL);
+        printf("%s:\tWord2: %ls\n", obj_name, text);
+        cpIspv->Speak(L"the speaking has finished, thanks!", dwflags, NULL);
+        printf("%s:\tWord3: the speaking has finished, thanks!\n\n", obj_name);
+        return S_OK;
+    }
+    // 处理实例的各种事件
+    void get_status()
+    {
+        // 使实例朗读完其所有的语音
+        cpIspv->WaitUntilDone(INFINITE);
+        /* 根据实例的事件处理各种信息 */
+        // 事件类，保存某个事件的各种信息 */
+        SPEVENT spvEvnt;
+        // 事件资源消息类，保存实例事件列表的长度等信息
+        SPEVENTSOURCEINFO spvEvntInf;
+        // 循环获取实例的每个事件
+        while (SUCCEEDED(cpIspv->GetEvents(1, &spvEvnt, NULL)))
+        {
+            // 获取实例当前的事件资源消息
+            cpIspv->GetInfo(&spvEvntInf);
+            // 根据事件的类型进行不同的操作
+            switch (spvEvnt.eEventId)
+            {
+                // 语音合成开始事件
+            case SPEI_START_INPUT_STREAM:
+                printf("status record:\t%s: the tts has begun synthesizing\n", obj_name);
+                break;
+                // 语音合成结束事件
+            case SPEI_END_INPUT_STREAM:
+                printf("status record:\t%s: the tts has finished synthesizing\n\n\n\n\n", obj_name);
+                break;
+                // 单词合成事件
+            case SPEI_WORD_BOUNDARY:
+                printf("\nstatus record:\t%s: the word start being synthesize\n", obj_name);
+                // 输出该单词的长度
+                printf("status record:\t%s: the length of this word is %u\n", obj_name, spvEvnt.wParam);
+                // 输出该单词在整个语音文本中的位置
+                printf("status record:\t%s: the position of this word in sentence is %d\n\n", obj_name, spvEvnt.lParam);
+                break;
+            }
+            // 判断实例的事件列表是否为空，为空就退出循环
+            if (spvEvntInf.ulCount == 0)
+            {
+                printf("status record:\t%s: this tts operation has finished\n\n\n\n\n\n\n", obj_name);
+                break;
+            }
+        }
+    }
+    ~Tts() {}
+};
+unsigned Tts::create_count = 0;
+
+// 回调函数
+void __stdcall callback_func(WPARAM wParam, LPARAM lParam)
+{
+    static unsigned count = 0;
+    // 输出传递给该函数的实参
+    printf("\nrecord:\tthe data is %u, %d\n", wParam, lParam);
+    // 输出该函数被调用的次数
+    printf("\nrecord:\tthe func has been called %u times\n\n", ++count);
+}
+
+int main()
+{
+    // 设置中文环境，使宽字符汉字在printf中可以正常显示。
+    setlocale(LC_ALL, "zh-CN");
+    // 初始化COM库
+    if (FAILED(::CoInitialize(NULL)))
+    {
+        trace("TTS:\tInitiate failed!");
+        return -1;
+    }
+    // 创建3个不同语音和优先级的ISpVoice实例
+    Tts tts_obj1(L"Gender=Female;Language=804", 1, 100);
+    Tts tts_obj2(L"Gender=Male;Language=409", 1, 100);
+    Tts tts_obj3(L"Gender=Female;Language=409", 1, 100, SPVPRI_OVER);
+    // 设置这3个ISpVoice实例的语音文本及输出方式
+    if (!tts_obj1.create_success || FAILED(tts_obj1.speaking(L"世界你好！", SPF_DEFAULT)))
+        return -1;
+    if (!tts_obj2.create_success || FAILED(tts_obj2.speaking(L"hello world！")))
+        return -1;
+    if (!tts_obj3.create_success || FAILED(tts_obj3.speaking(L"hello world！")))
+        return -1;
+    // 处理3个实例的各种事件
+    tts_obj1.get_status();
+    tts_obj2.get_status();
+    tts_obj3.get_status();
+    // 消息循环，用于调用回调函数callback_func
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    // 卸载COM库
+    ::CoUninitialize();
+    return 0;
+}
+```
+
+#### 1.121 该例所用接口和类的解析
+
+我先从简单的实现一个TTS操作所需要的操作开始。
+
+##### 1.1211 COM使用规范
+
+###### 1.12111 使用COM原生操作
+
+因为我们使用的接口都为COM接口，所以要符合COM的使用规范，对于COM接口，我们不需要知道太多，只需要明白以下几点：
+* 在使用COM接口前和使用COM接口完毕后都要初始化COM库或者卸载COM库。
+* 每个COM接口都是一个纯虚类，我们不能直接建立该接口的对象，而需要用`CoCreateInstance`函数来创建一个指向该接口派生类的对象的指针，从而可以使用该接口的各种函数和基类。
+* CoCreateInstance函数的函数原型为
+  ```c++
+  HRESULT __stdcall CoCreateInstance(const IID &rclsid, LPUNKNOWN pUnkOuter, DWORD dwClsContext, const IID &riid, LPVOID *ppv);
+  ```
+  其中：
+  * `rclsid`是要创建的接口实例对应接口所在的组件ID号，其中`ISpVoice`接口所在组件ID号为`CLSID_SpVoice`。
+  * `pUnkOuter`是指向所创对象为聚合对象时指向的`IUnknown`接口，如果不是聚合对象，则填`NULL`。
+  我们创建的不是聚合对象，所以填`NULL`。
+  * `dwClsContext`决定所创对象的上下文，我们一般填`CLSCTX_ALL`就行。
+  * `riid`是指要创建的接口实例对应接口的ID号。
+  * `ppv`为保存指向该对象指针地址的指针，如果创建对象失败，则该指针为`NULL`。
+* 每个COM接口都是用两个虚函数`AddRef`和`Release`来控制实例的生命期(`AddRef`增加1引用计数，`Release`减少1引用计数；引用计数为0时释放该实例；`CoCreateInstance`函数也会增加1引用计数)，所以我们在使用COM接口实例时需要注意实例的生命期，在使用完实例时要及时释放掉。
+* COM规范中的几乎所有函数都会在被调用后返回一个`HRESULT`类型(`HRESULT`类型为`long`的别名)的值，通过该值可以判断函数的执行状况，比如是否成功等，我们可以通过两种宏`SUCCEEDED`和`FAILED`来判断函数是否成功：
+  如果函数执行成功(返回`S_OK`)，则`SUCCEEDED`为`1`，`FAILED`为`0`；失败(返回`E_FAIL`)则反之。
+
+以下是符合COM使用规范的`ISpVoice`实例创建与销毁：
+```c++
+#include <sapi.h>
+#include <stdio.h>
+
+// 输出执行记录
+void trace(const char* strs) { printf("%s\n", strs); }
+
+int main()
+{
+    // 初始化COM库
+    if (FAILED(::CoInitialize(NULL)))
+    {
+        trace("TTS:\tInitiate failed!\n");
+        return -1;
+    }
+    // 指向ISpVoice实例的指针piSpv
+    ISpVoice* piSpv;
+    // 创建该接口派生类的对象，piSpv指向该对象
+    HRESULT hr = CoCreateInstance(CLSID_SpVoice, NULL, CLSCTX_ALL, IID_ISpVoice, (void**)&piSpv);
+    // 判断对象是否成功创建
+    if (FAILED(hr))
+    {
+        trace("TTS:\tcreate ISpVoice instance failed!\n");
+        return -1;
+    }
+    /* 
+        
+      其他操作
+
+    */
+    // 释放实例
+    piSpv->Release();
+    // 卸载COM库
+    ::CoUninitialize();
+    return 0;
+}
+```
+
+###### 1.12112 使用CComPtr智能指针类操作
+
+但是用这种原始的方法创建接口对象似乎有些繁琐，所以COM标准提供了一组辅助模板类来帮助我们快速创建接口对象，那也就是之前所说的`CComPtr`智能指针类，该智能指针类在头文件`sphelper.h`中。
+
+我们只需要在模板实参中填上所需要创建对象的接口，然后创建了一个对应接口的智能指针，我们可以将该智能指针和普通指针一样用于赋值或当实参传递等，而无需自己管理该智能指针的生命期(但是智能指针被地址运算符使用时，该智能指针必须要为`NULL`，否则该智能指针被写入新地址后，之前指向的对象不会被自动释放)。
+
+该智能指针还有一些特别的成员函数，可以供我们使用，比如成员函数`CoCreateInstance`：
+该成员和普通的全局`CoCreateInstance`函数类似，只不过不用提供接口的ID号，只需要提供接口所在的组件ID号，而且`pUnkOuter`和`dwClsContext`都有默认实参，`pUnkOuter`为`NULL`，`dwClsContext`为`CLSCTX_ALL`。
+当我们使用该成员函数并创建成功后，对应的智能指针就指向了新创建的对象。
+
+以下是使用`CComPtr`智能指针类的`ISpVoice`实例创建与销毁：
+```c++
+#include <sapi.h>
+#include <stdio.h>
+#include <sphelper.h>
+
+// 输出执行记录
+void trace(const char* strs) { printf("%s\n", strs); }
+
+int main()
+{
+    // 初始化COM库
+    if (FAILED(::CoInitialize(NULL)))
+    {
+        trace("TTS:\tInitiate failed!\n");
+        return -1;
+    }
+    // 指向ISpVoice实例的智能指针cpSpv
+    CComPtr<ISpVoice> cpSpv;
+    // 创建该接口派生类的对象，cpSpv指向该对象
+    HRESULT hr = cpSpv.CoCreateInstance(CLSID_SpVoice);
+    // 判断对象是否成功创建
+    if (FAILED(hr))
+    {
+        trace("TTS:\tcreate ISpVoice instance failed!\n");
+        return -1;
+    }
+    /*
+
+      其他操作
+
+    */
+    // 卸载COM库
+    ::CoUninitialize();
+    return 0;
+}
+```
+
+##### 1.1212 ISpVoice接口常用函数
+
+接下来我会介绍一些`ISpVoice`接口特有的函数。
+
+###### 1.12121 SetOutput函数
+
+**介绍**
+
+`ISpVoice::SetOutput`用于设置实例的输出对象，该对象可以是一个数据流、音频设备或者是一个代表音频输出设备对象的令牌。
+如果实例没有用到该函数，或者`pUnkOutput`为`NULL`，则使用默认的音频设备。
+
+**函数原型**
+
+```c++
+HRESULT SetOutput(IUnknown *pUnkOutput, BOOL fAllowFormatChanges);
+```
+
+**参数**
+
+* `pUnkOutput`
+  [in] 指向输出对象的`IUnknown`指针。指针必须指向实现了`ISpStreamFormat`（流或音频设备）的对象，或实现了`ISpObjectToken`的对象。
+  如果提供的是一个令牌，则此方法将创建令牌所对应的对象并使用它。
+  如果`pUnkOutput`为`NULL`，则将使用默认的音频输出设备。
+* `fAllowFormatChanges`
+  [in] 该标志指定是否允许更改语音的音频输出对象的格式，以匹配TTS引擎的格式或正在朗读的wav流格式。
+  如果为`FALSE`，则语音将会使用SAPI格式转换器对渲染数据和输出对象之间进行格式转换；如果要使用默认音频设备并且输出的格式无关紧要，则应将其设置为`TRUE`。
+  如果`pUnkOutput`是`ISpStreamFormat` 对象，则忽略`fAllowFormatChanges`设置，在这种情况下，则该实例将以指定的流格式输出音频数据。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+* `SPERR_UNINITIALIZED`
+* `E_OUTOFMEMORY`
+
+**示例**
+
+以下是如何枚举在 `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\AudioOutput` 下注册的所有可用音频输出设备的示例：
+
+```c++
+// Declare local identifiers:
+HRESULT                        hr = S_OK;
+CComPtr<ISpObjectToken>        cpAudioOutToken;
+CComPtr<IEnumSpObjectTokens>   cpEnum;
+CComPtr<ISpVoice>              cpVoice;
+ULONG                          ulCount = 0;
+
+// Create the SAPI voice.
+hr = cpVoice.CoCreateInstance(CLSID_SpVoice);
+
+if (SUCCEEDED (hr))
+{
+   // Enumerate the available audio output devices.
+   hr = SpEnumTokens( SPCAT_AUDIOOUT, NULL, NULL, &cpEnum; );
+}
+
+if (SUCCEEDED (hr))
+{
+   // Get the number of audio output devices.
+   hr = cpEnum->GetCount( &ulCount; );
+}
+
+// Obtain a list of available audio output tokens,
+// set the output to the token, and call Speak.
+while (SUCCEEDED(hr) && ulCount--)
+{
+   if (SUCCEEDED (hr))
+   {
+      hr = cpEnum->Next( 1, &cpAudioOutToken;, NULL );
+   }
+
+   if (SUCCEEDED (hr))
+   {
+      hr = cpVoice->SetOutput( cpAudioOutToken, TRUE );
+   }
+
+   if (SUCCEEDED (hr))
+   {
+      hr = cpVoice->Speak( L"How are you?", SPF_DEFAULT, NULL );
+   }
+}
+
+if (SUCCEEDED (hr))
+{
+   // Do more stuff here.
+}
+```
+
+###### 1.12122 SetVoice函数
+
+**介绍**
+
+`ISpVoice::SetVoice`用于设置语音合成(文本朗读)所使用的语音，如果实例没有用到该函数，或者`pToken`为`NULL`，则使用默认的语音，该默认语音是Windows设置中的语音控制面板中所设置的语音。
+![Speech Control Panel](image/2021-07-27-16-55-48.png)
+
+改变实例的语音并不会改变其实例的音量和语速属性。
+
+**函数原型**
+
+```c++
+HRESULT SetVoice(ISpObjectToken *pToken);
+```
+
+**参数**
+
+* `pToken`
+  [in] 该指针指向所需要设置的语音对应的令牌，这些令牌为`ISpObjectToken`接口对象，具体详见[ISpObjectToken接口介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450856(v=vs.85))。
+  如果`pToken`为`NULL`，则将使用默认语音。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+
+**示例**
+
+下面是一个例子，枚举所有在 `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices`下注册的可用语音：
+```c++
+// Declare local identifiers:
+HRESULT                        hr = S_OK;
+CComPtr<ISpObjectToken>        cpVoiceToken;
+CComPtr<IEnumSpObjectTokens>   cpEnum;
+CComPtr<ISpVoice>              cpVoice;
+ULONG                          ulCount = 0;
+
+// Create the SAPI voice.
+hr = cpVoice.CoCreateInstance(CLSID_SpVoice);
+
+if (SUCCEEDED (hr))
+{
+   // Enumerate the available voices.
+   hr = SpEnumTokens(SPCAT_VOICES, NULL, NULL, &cpEnum;);
+}
+
+if (SUCCEEDED (hr))
+{
+   // Get the number of voices.
+   hr = cpEnum->GetCount(&ulCount;);
+}
+
+// Obtain a list of available voice tokens, set
+// the voice to the token, and call Speak.
+while (SUCCEEDED(hr) && ulCount--)
+{
+   cpVoiceToken.Release();
+
+   if (SUCCEEDED (hr))
+   {
+      hr = cpEnum->Next(1, &cpVoiceToken;, NULL);
+   }
+
+   if (SUCCEEDED (hr))
+   {
+      hr = cpVoice->SetVoice(cpVoiceToken);
+   }
+
+   if (SUCCEEDED (hr))
+   {
+      hr = cpVoice->Speak( L"How are you?", SPF_DEFAULT, NULL );
+   }
+
+}
+
+if (SUCCEEDED (hr))
+{
+   // Do more stuff here.
+}
+```
+
+###### 1.12123 Speak函数
+
+**介绍**
+
+`ISpVoice::Speak`用于设置语音合成(文本朗读)所使用的文本(或者文件路径)，并发出相应的朗读请求。
+
+**函数原型**
+
+```c++
+HRESULT Speak(LPCWSTR *pwcs, DWORD dwFlags,
+ULONG *pulStreamNumber);
+```
+
+**参数**
+
+* `pwcs`
+  [in, string] 该指针指向一个以空字符结尾的字符串，用于进行文本合成(文本朗读)，该字符串可能包含XML标记。
+  当`dwFlags`被设为`SPF_PURGEBEFORESPEAK`时，该参数可以为`NULL`，此时表示该实例将会清除当前所有被挂起的文本朗读请求(也就是所有已发出，但还没有朗读的请求)。
+  如果d`wFlags`被设为`SPF_IS_FILENAME`，则该参数指向的字符串必须是有效的文件路径名。
+  如果字符串包含特殊的XML标记，则该函数永远返回`S_OK`。
+  如：
+  ```c++
+  hr = cpVoice->Speak(L"&ltEMPH;/&gtDo; it now", SPF_IS_XML, 0);
+  ```
+* `dwFlags`
+  [in] 该标记用于控制文本朗读的行为。该标记的值必须是枚举类型`SPEAKFLAGS`的成员。
+* `pulStreamNumber`
+  [out] 该指针指向一个与当前文本朗读请求相关联的输入流编号。每次文本朗读请求发出后，相关联的输入流编号将会被返回，对应该请求的事件中包含该编号。
+  正常情况下，每个请求的输入流编号都会被设为`1`，但是如果有多个异步的文本朗读(或音频朗读)请求，则这些请求就会进行排队，编号会随顺序逐个加`1`。
+  如果该参数设为`NULL`，则该请求不会返回编号。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+* `E_POINTER`
+* `E_OUTOFMEMORY`
+* `SPERR_INVALID_FLAGS`
+* `SPERR_DEVICE_BUSY`
+
+###### 1.12124 GetStatus函数
+
+**介绍**
+
+`ISpVoice::GetStatus`用于获取该实例相关的状态信息。
+
+**函数原型**
+
+```c++
+HRESULT GetStatus(SPVOICESTATUS *pStatus, LPWSTR **ppszLastBookmark);
+```
+
+**参数**
+
+* `pStatus`
+  [out] 该指针指向一个结构体`SPVOICESTATUS`，该结构体可以获取实例的状态信息。
+  如果不想要该信息，可以将该参数设为NULL。
+  由于`SPVOICESTATUS`结构体的内容与音频设备相关，所以我们不能获取到音频输出的相关动态。
+* `ppszLastBookmark`
+  [out, string] 该指针指向一个由`CoTaskMemAlloc`函数分配的，包含该实例最后的书签文本的，以空字符结尾的字符串。
+  当我们使用完该字符串后，必须要使用`CoTaskMemFree`函数来释放这个字符串。
+  如果实例没有书签，则该参数为`NULL`。
+  如果不想要该信息，可以将该参数设为`NULL`。
+
+**返回值**
+
+* `S_OK`
+* `E_POINTER`
+* `E_OUTOFMEMORY`
+
+###### 1.12125 SetPriority函数
+
+**介绍**
+
+`ISpVoice::SetPriority`用于设置实例的语音输出优先级。所有实例的默认优先级为`SPVPRI_NORMAL`。
+
+所有`ISpVoice`实例的未处理的异步朗读请求会根据该实例的语音优先级来排队，高优先级实例的朗读请求会优先处理。
+优先级为`SPVPRI_ALERT`的实例比`SPVPRI_NORMAL`的更高，所以当队伍中有`SPVPRI_ALERT`优先级的实例时，系统会挂起所有的低优先级实例的朗读请求，直到处理完所有的高优先级请求或者达到挂起时间限制(用`ISpVoice::SetAlertBoundary`函数来设置)后，系统才会继续按顺序处理其他低优先级请求。
+
+所有`SPVPRI_OVER`优先级实例的异步朗读请求会按顺序同时和其他优先级的请求一起被处理(也就是同时有多个声音在进行)。
+
+对于音频朗读来说，如果对应实例没有自己实现`ISpAudio`接口，则所有的音频朗读请求都会被视为`SPVPRI_OVER`优先级。
+
+**函数原型**
+
+```c++
+HRESULT SetPriority(SPVPRIORITY ePriority);
+```
+
+**参数**
+
+* `ePriority`
+  [in] 该参数接受枚举类型`SPVPRIORITY`的成员，用于设置优先级。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+
+###### 1.12126 SetRate函数
+
+**介绍**
+
+`ISpVoice::SetRate`用于设置实例的语音渲染速率(语速)，默认的速率是Windows设置中的语音控制面板中所设置的速率。
+
+不是所有语音的语速都一样，会随着TTS引擎不同而变化。
+我们可以通过该函数或者在语音文本(仅限XML文本)中设置语音的语速，系统会综合这两种设置来决定最终的语音语速。
+
+**函数原型**
+
+```c++
+HRESULT SetRate(long RateAdjust);
+```
+
+**参数**
+
+* `RateAdjust`
+  [in] 该参数用于调整实例语音的语速，语速调整范围为[`-10`,`10`]，超出范围值的设置将会被修改为范围内值的设置。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+
+###### 1.12127 SetVolume函数
+
+**介绍**
+
+`ISpVoice::SetVolume`用于设置实例语音的实时音量大小。对于所有语音来说，默认的音量大小都为`100`。
+
+该函数会影响wav数据的音量，但是不会影响其重放的音量大小。该音量大小是指当前输出设备最大音量的百分比(该音量大小是相对于我们系统所设置的音量大小，比如我们的扬声器音量为50，则默认音量的扬声器音量大小可以视为50，设置音量大小为50的扬声器音量大小可以视为25)，不同的输出设备有不同的最大音量。
+
+我们可以通过该函数或者在语音文本(仅限XML文本)中设置语音的音量，系统会综合这两种设置来决定最终的语音音量。
+
+**函数原型**
+
+```c++
+HRESULT SetVolume(USHORT usVolume);
+```
+
+**参数**
+
+* `usVolume`
+  [in] 该参数用于设置实例语音音量的大小，音量大小为百分比数，调整范围为[`0`,`100`]，超出范围值的设置将会被修改为范围内值的设置。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+
+###### 1.12128 WaitUntilDone函数
+
+**介绍**
+
+`ISpVoice::WaitUntilDone`用于处理实例当前未处理的朗读请求。
+当该函数被调用时，如果实例当前有未处理的朗读请求，则该函数会一直等到处理完所有的朗读请求或者到达等待时间后才会返回到调用者位置。
+
+该函数通常用于一个或多个异步朗读请求表达式之后，使这些请求能够被及时处理而不是挂起到很久。
+
+**函数原型**
+
+```c++
+HRESULT WaitUntilDone(ULONG msTimeout);
+```
+
+**参数**
+
+* `msTimeout`
+  [in] 该参数用于设置等待时间。
+  当该参数设置为`INFINITE`时，则表示等待时间为无限(也就是该函数会等到当前所有的请求被处理完才会返回)。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+
+###### 1.12129 SpeakCompleteEvent函数
+
+**介绍**
+
+`ISpVoice::SpeakCompleteEvent`与`ISpVoice::WaitUntilDone`类似，该函数返回一个事件(Event32事件机制中的事件)句柄，当实例的所有挂起(未处理的)请求被处理完后，该事件将会发出信号。
+如果后续我们还需要使用该事件，则无需使用`CloseHandle`函数来关闭该事件。
+
+**函数原型**
+
+```c++
+[local] HRESULT SpeakCompleteEvent(void);
+```
+
+**返回值**
+
+* `Event Handle`
+
+##### 1.1213 ISpEventSource接口的函数
+
+有很多接口都继承了`ISpEventSource`接口，包括`ISpVoice`接口，所以有必要讲讲该接口的函数。
+
+`ISpEventSource`接口是sapi中非常重要的一大接口，它也是sapi事件机制的核心，通过该接口，我们可以获取TTS和SR接口实例中的有用信息，并根据这些信息作出一些功能操作。
+
+该接口继承了`ISpNotifySource`接口，而`ISpNotifySource`接口实现了sapi的消息通知机制：
+通过发送消息，使用标准回调机制(Windows Message、callback proc、Win32 Events)与应用程序通讯。我们可以由此来进行一些监视轮询等操作。
+
+而对于`ISpEventSource`接口，它则实现了事件过滤与获取机制。我们可以设置哪些事件会被通知，哪些事件需要排队。
+对于只设为被通知的事件，程序会根据接收消息的事件池来处理该事件；对于只设为需要排队的事件来说，并没有任何作用。
+只有同时设为被通知和需要排队的事件才会加入到实例的事件队列中(也会用事件池来处理该事件)。
+我们可以使用事件类来获取实例的当前事件队列的消息等。
+
+继承了`ISpEventSource`接口的接口有：
+* `ISpRecoContext`
+* `ISpRecoContext2`
+* `ISpVoice`
+* `SpMMAudioIn`
+* `SpMMAudioOut`
+* `SpRecPlayAudio`
+* `SpStreamFormatConverter`
+
+###### 1.12131 SetInterest函数
+
+**介绍**
+
+`ISpEventSource::SetInterest`用于设置实例所感兴趣的事件，我们可以设置该实例的哪些事件会被通知，哪些事件需要排队。
+对于只设为被通知的事件，程序会根据接收消息的事件池来处理该事件；对于只设为需要排队的事件来说，并没有任何作用。
+只有同时设为被通知和需要排队的事件才会加入到实例的事件队列中(也会用事件池来处理该事件)。
+
+如果实例从未调用过该函数，则对于SR类实例来说，默认只有`SPEI_RECOGNITION`事件被设置为被通知和需要排队；对于SR类和其他引擎实例来说，默认没有任何事件被设置为被通知和需要排队。
+
+一般来说，被通知事件类型的集合往往都是需要排队事件类型集合的超集，因此可能有些被通知的事件并不需要排队，这对于使用`ISpVoice::GetStatus`函数来轮询事件很有用。
+
+注意我们需要宏`SPFEI()`来将事件类型转换为该函数参数能够接受的类型，对于设置多个事件类型，我们可以用位或`|`运算符来操作。
+例如，要设置`SPEI_RECOGNITION`和`SPEI_HYPOTHESIS`事件为被通知和需要排队，请按如下方式调用此函数：
+```c++
+// Declare local identifiers:
+HRESULT                    hr = S_OK;
+CComPtr<ISpEventSource>    cpEventSource;
+ULONGLONG                  ullMyEvents = SPFEI(SPEI_RECOGNITION) | SPFEI(SPEI_HYPOTHESIS);
+
+// Set type of events the client is interested in.
+hr = cpEventSource->SetInterest(ullMyEvents, ullMyEvents);
+
+if (SUCCEEDED(hr))
+{
+   // Do stuff here.
+}
+```
+
+**函数原型**
+
+```c++
+HRESULT SetInterest(ULONGLONG ullEventInterest, ULONGLONG ullQueuedInteres);
+```
+
+**参数**
+
+* `ullEventInterest`
+  [in] 该参数用于设置会被通知的事件类型。
+  实例中所有被通知的事件类型会根据接收消息的事件池来处理该事件。
+  所有的事件类型必须是枚举类型`SPEVENTENUM`中的成员。
+* `ullQueuedInterest`
+  [in] 该参数用于设置会需要排队的事件类型。
+  实例中所有需要排队的事件类型必须也要在`ullEventInterest`中设置才能出现在事件队列中，否则没有任何作用。
+  所有的事件类型必须是枚举类型`SPEVENTENUM`中的成员。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+* `S_FALSE`
+
+###### 1.12132 GetEvents函数
+
+**介绍**
+
+`ISpEventSource::GetEvents`用于获取实例的事件队列中的事件并随后从事件队列中移除刚获取的事件。
+
+要注意，如果事件队列为空，该事件还是会返回`S_OK`。
+
+不过我们一般使用`CSpEvent`类从实例事件队列中来获取和操作事件。
+
+**函数原型**
+
+```c++
+HRESULT GetEvents(ULONG ulCount, SPEVENT *pEventArray, ULONG *pulFetched);
+```
+
+**参数**
+
+* `ulCount`
+  [in] 该参数用于设置该函数能够获取的事件数量。
+  如果事件队列中的事件数量少于该数量，则获取所有的事件。
+* `pEventArray`
+  [out] 该指针指向一个以`SPEVENT`结构体为元素的数组。需要获取的事件信息被写入到这些`SPEVENT`结构体中。
+  如果事件队列为空，则没有任何事件被写入。
+* `pulFetched`
+  [out] 该指针指向一个表示返回事件数量的值。
+  如果`ulCount`被设为`1`，则该参数可以设为`NULL`。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+
+###### 1.12133 GetInfo函数
+
+**介绍**
+
+`ISpEventSource::GetInfo`用于获取实例的事件队列相关的信息。
+
+**函数原型**
+
+```c++
+HRESULT GetInfo(SPEVENTSOURCEINFO *pInfo);
+```
+
+**参数**
+
+* `pInfo`
+  [out] 该指针指向一个`SPEVENT`结构体，该结构体包含当前事件队列的相关信息。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+
+##### 1.1214 ISpNotifySource接口的函数
+
+`ISpNotifySource`接口是sapi事件相关的另一大接口，该接口实现了sapi的消息通知机制：
+通过发送消息，使用标准回调机制(Windows Message、callback proc、Win32 Events)与应用程序通讯。我们可以由此来进行一些监视轮询等操作。
+
+对于`ISpNotifySource`接口所创建或设置的消息函数来说，TTS和SR实例只有朗读请求被处理(不是发出)或者识别出语音时才会产生消息(也就是系统会在Windows消息队列中加入指定的消息，以供后续的消息循环来取用)，然后我们就可以通过这些创建或设置的回调函数来对实例的事件队列等信息进行操作。
+
+因为产生消息实际是系统在Windows消息队列中加入指定的消息，所以除了Win32事件外，其他的回调机制必须都要有消息循环和窗口过程函数(如果有系统自己设置的就不需要自己设置了)来从消息队列中获取通知以及接收通知。且都是在产生消息的线程中来进行回调的。
+
+继承了`ISpNotifySource`接口的接口有：
+* `ISpRecoContext`
+* `ISpRecoContext2`
+* `ISpVoice`
+* `SpMMAudioIn`
+* `SpMMAudioOut`
+* `SpRecPlayAudio`
+* `SpStreamFormatConverter`
+
+###### 1.12141 SetNotifySink函数
+
+**介绍**
+
+`ISpNotifySource::SetNotifySink`用于指定产生实例自由线程消息通知的通知池，该通知池通过`SpNotifySink::Notify`函数来产生该消息。
+
+因为自由线程消息可以在执行过程中的任何时刻发生在任何线程上，所以它们非常容易发生死锁和重新进入的问题。
+所以一般只是用该函数来清除当前实例相关的所有消息通知机制，而不用来进行其他操作。
+
+**函数原型**
+
+```c++
+HRESULT SetNotifySink(ISpNotifySink *pNotifySink);
+```
+
+**参数**
+
+* `pNotifySink`
+  [in] 该指针指向指定的通知池。
+  如果该指针设为`NULL`，则会清除当前实例相关的所有消息通知机制。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+
+###### 1.12142 SetNotifyWindowMessage函数
+
+**介绍**
+
+`ISpNotifySource::SetNotifyWindowMessage`用于指定接收实例发出的窗口消息(window messages)的窗口。
+
+我们指定某窗口句柄，使该窗口的窗口过程函数可以来接收该窗口消息，所以我们需要自己设置消息循环和窗口过程函数。
+
+**函数原型**
+
+```c++
+HRESULT SetNotifyWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+```
+
+**参数**
+
+* `hWnd`
+  [in] 该参数为接收实例窗口消息的窗口句柄。
+* `Msg`
+  [in] 该参数为实例需要发送的窗口消息的编号。
+* `wParam`
+  [in] 该参数为实例窗口消息的附带的`wParam`参数。
+* `lParam`
+  [in] 该参数为实例窗口消息的附带的`lParam`参数。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+
+###### 1.12143 SetNotifyCallbackFunction函数
+
+**介绍**
+
+`ISpNotifySource::SetNotifyCallbackFunction`用于指定接收实例消息通知的C风格函数。
+
+实际上，C风格函数接收实例消息通知的流程还是使用了Windows消息机制，系统设置了一个隐藏的窗口以及窗口过程函数来先接收实例产生的消息通知，然后这个隐藏的窗口过程函数调用该C风格函数来进行消息的传递，所以我们需要自己设置消息循环。
+
+该函数所需要的C风格函数需要我们自己来实现，`SPNOTIFYCALLBACK`是一个函数指针：
+```c++
+typedef void __stdcall SPNOTIFYCALLBACK(WPARAM wParam, LPARAM lParam);
+```
+我们要实现和该函数指针一样原型的函数来处理实例消息。
+
+**函数原型**
+
+```c++
+HRESULT SetNotifyCallbackFunction(SPNOTIFYCALLBACK *pfnCallback, WPARAM wParam, LPARAM lParam);
+```
+
+**参数**
+
+* `pfnCallback`
+  [in] 该指针为接收实例消息通知的C风格函数的地址。
+* `wParam`
+  [in] 该参数为消息通知附带的`wParam`参数。
+* `lParam`
+  [in] 该参数为消息通知附带的`lParam`参数。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+
+###### 1.12144 SetNotifyCallbackInterface函数
+
+**介绍**
+
+`ISpNotifySource::SetNotifyCallbackInterface`用于指定接收实例消息通知的`ISpNotifyCallback`对象，实际接收消息通知的是该对象中的`ISpNotifyCallback::NotifyCallback`函数。
+
+和`SetNotifyCallbackFunction`一样，`ISpNotifyCallback::NotifyCallback`函数接收实例消息通知的流程也是使用了Windows消息机制，系统设置了一个隐藏的窗口以及窗口过程函数来先接收实例产生的消息通知，然后这个隐藏的窗口过程函数调用该函数来进行消息的传递，所以我们需要自己设置消息循环。
+
+`ISpNotifyCallback`是一个C++虚类，但它不是COM标准接口，所以我们只用创建一个派生类来实现该类的`NotifyCallback`函数就行。
+
+`NotifyCallback`的函数原型为：
+```c++
+HRESULT NotifyCallback(WPARAM wParam, LPARAM lParam);
+```
+我们要实现该函数才能处理实例消息。
+
+**函数原型**
+
+```c++
+HRESULT SetNotifyCallbackInterface(ISpNotifyCallback *pSpCallback, WPARAM wParam, LPARAM lParam);
+```
+
+**参数**
+
+* `pfnCallback`
+  [in] 该指针为接收实例消息通知的`ISpNotifyCallback`对象，实际接收消息通知的是该对象中的`ISpNotifyCallback::NotifyCallback`函数。
+* `wParam`
+  [in] 该参数为消息通知附带的`wParam`参数。
+* `lParam`
+  [in] 该参数为消息通知附带的`lParam`参数。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+
+###### 1.12145 SetNotifyWin32Event函数
+
+**介绍**
+
+`ISpNotifySource::SetNotifyWin32Event`用于设置接收实例消息的Win32事件对象。
+
+该函数无需任何参数，只要调用了该函数，对应实例就会生成一个用于接收消息的未激活的Win32事件(要注意Win32事件和sapi中的事件不是同一个东西)。
+
+使用该函数后，可以使用`ISpNotifySource::WaitForNotifyEvent`、`ISpNotifySource::GetNotfyEventHandle`和其他各种Win32同步函数来等待该Win32事件接收到消息等操作。
+
+**函数原型**
+
+```c++
+HRESULT SetNotifyWin32Event(void);
+```
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+
+###### 1.12146 WaitForNotifyEvent函数
+
+**介绍**
+
+`ISpNotifySource::WaitForNotifyEvent`用于等待实例消息。
+
+该函数被调用时，只有当实例消息产生、与实例相关的Win32事件被触发或者到达等待时间时，该函数才会返回到调用者位置。
+
+调用该函数时，如果当前实例没有其他消息通知机制，且该实例设置了相关的Win32事件，则相关的Win32事件则会被初始化(进入活动状态)。
+
+**函数原型**
+
+```c++
+HRESULT WaitForNotifyEvent(DWORD dwMilliseconds);
+```
+
+**参数**
+
+* `dwMilliseconds`
+  [in] 该参数用于设置等待时间。
+  当该参数设置为`INFINITE`时，则表示等待时间为无限。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `SPERR_ALREADY_INITIALIZED`
+
+###### 1.12147 GetNotifyEventHandle函数
+
+**介绍**
+
+`ISpNotifySource::GetNotifyEventHandle`用于获取实例相关的Win32事件句柄。获取了事件句柄后，该事件就可以用于其他Win32 `WaitForxxx`相关的事件函数了。
+
+获取事件句柄后不要用`CloseHandle`函数来关闭，因为该事件与实例相关联。
+
+调用该函数时，如果当前实例没有其他消息通知机制，且该实例设置了相关的Win32事件，则相关的Win32事件则会被初始化(进入活动状态)。
+
+**函数原型**
+
+```c++
+HANDLE GetNotifyEventHandle(void);
+```
+
+**返回值**
+
+* `S_OK`
+* `HANDLE`(Win32 event)
+* `INVALID_HANDLE_VALUE`
+
+##### 1.1215 所用到的特殊类型
+
+之前我们所介绍的很多函数都需要我们传递一些sapi所含的特殊类型，比如一些枚举类型和结构体。我们也用了一些其他的辅助类来进行操作。
+
+接下来就会逐个介绍各种特殊类型。
+
+###### 1.12151 枚举类型SPEAKFLAGS
+
+**介绍**
+
+该枚举类型用于指示发送到TTS引擎的朗读内容的行为，用于`ISpVoice::Speak` 和 `ISpTTSEngine::Speak`函数。
+如果要同时使用多个枚举成员，可以使用位或`|`来进行组合。
+
+以下是枚举类型`SPEAKFLAGS`的定义
+```c++
+typedef enum SPEAKFLAGS
+{
+    //--- SpVoice flags
+    SPF_DEFAULT,
+    SPF_ASYNC,
+    SPF_PURGEBEFORESPEAK,
+    SPF_IS_FILENAME,
+    SPF_IS_XML,
+    SPF_IS_NOT_XML,
+    SPF_PERSIST_XML,
+
+    //--- Normalizer flags
+    SPF_NLP_SPEAK_PUNC,
+
+    //--- TTS Format
+    SPF_PARSE_SAPI,
+    SPF_PARSE_SSML,
+    SPF_PARSE_AUTODETECT
+
+    //--- Masks
+    SPF_NLP_MASK,
+    SPF_PARSE_MASK,
+    SPF_VOICE_MASK,
+    SPF_UNUSED_FLAGS
+} SPEAKFLAGS;
+```
+
+**成员**
+
+* `SPF_DEFAULT`
+  默认的设置，该设置包括：
+  * 进行同步朗读请求(也就是发出朗读请求的调用只会在引擎处理完该请求后才会返回)。
+  * 不清除当前的挂起请求。
+  * 仅当所给字符串的第一个字符是左尖括号(<)时，将文本解析为XML。
+  * 跨朗读请求调用时不能保持全局XML状态更改。
+  * 不把标点符号当做词来朗读。
+* `SPF_ASYNC`
+  指定朗读请求为异步，也就是发出朗读请求的调用在发出朗读请求后马上返回，此时朗读请求还未被处理，为挂起状态。
+* `SPF_PURGEBEFORESPEAK`
+  在发出该朗读请求之前，清除当前所有的挂起请求。
+* `SPF_IS_FILENAME`
+  指示所给的字符串为文件名，该文件内容会被当成朗读文本。
+* `SPF_IS_XML`
+  指示将所给的字符串当做XML格式来处理。
+* `SPF_IS_NOT_XML`
+  指示将所给的字符串不当做XML格式来处理。
+* `SPF_PERSIST_XML`
+  指示跨朗读请求调用时可以保持全局XML状态更改。
+* `SPF_NLP_SPEAK_PUNC`
+  指示将所给的字符串中的标点符号当做词来朗读。
+* `SPF_PARSE_SAPI`
+  强制将XML格式文本当做MS SAPI来进行语法分析。
+* `SPF_PARSE_SSML`
+  强制将XML格式文本当做W3C SSML来进行语法分析。
+* `SPF_PARSE_AUTODETECT`
+  XML的格式由系统自动判断，如果XML格式中的文本没有格式指明，则该方式为XML的默认格式。
+* `SPF_NLP_MASK`
+  在发出该朗读请求之前，清除当前所有的朗读行为，除了`SPF_NLP_SPEAK_PUNC`外。
+* `SPF_PARSE_MASK`
+  等价于`SPF_PARSE_SAPI | SPF_PARSE_SSML`。
+* `SPF_VOICE_MASK`
+  设置所有的朗读行为。
+* `SPF_UNUSED_FLAGS`
+  取消所有的朗读行为。
+
+###### 1.12152 结构体SPVOICESTATUS
+
+**介绍**
+
+该结构体包含语音实例相关的状态信息。用于`ISpVoice::GetStatus`函数。
+
+以下是结构体`SPVOICESTATUS`的定义
+```c++
+typedef struct SPVOICESTATUS
+{
+    ULONG       ulCurrentStream;
+    ULONG       ulLastStreamQueued;
+    HRESULT     hrLastResult;
+    DWORD       dwRunningState;
+    ULONG       ulInputWordPos;
+    ULONG       ulInputWordLen;
+    ULONG       ulInputSentPos;
+    ULONG       ulInputSentLen;
+    LONG        lBookmarkId;
+    SPPHONEID   PhonemeId;
+    SPVISEMES   VisemeId;
+    DWORD       dwReserved1;
+    DWORD       dwReserved2;
+} SPVOICESTATUS;
+```
+
+**成员**
+
+* `ulCurrentStream`
+  当前被处理请求相关联输入流的编号。
+* `ulLastStreamQueued`
+  最近一个已被处理请求相关联输入流的编号。
+* `hrLastResult`
+  最近一个已发出的朗读请求调用的返回值。
+* `dwRunningState`
+  显示实例的状态，也就是显示实例当前到底是已经处理完请求，还是存在未处理请求。
+  这些值是由枚举类型`SPRUNSTATE`来表示的，如果值为`0`，则表示存在未处理请求。
+  枚举类型`SPRUNSTATE`的定义如下：
+  ```c++
+  typedef enum SPRUNSTATE
+  {
+      // 表示已经处理完请求
+      SPRS_DONE,
+      // 表示存在未处理请求
+      SPRS_IS_SPEAKING
+  } SPRUNSTATE;
+  ```
+* `ulInputWordPos`
+  当前被处理的词在所在语句的位置。
+* `ulInputWordLen`
+  当前被处理的词的字符长度。
+* `ulInputSentPos`
+  当前被处理的语句在所在文本的位置。
+* `ulInputSentLen`
+  当前被处理的语句的字符长度。
+* `lBookmarkId`
+  表示当前书签的字符串转换为的10进制数的值，如果字符串不为数字字符开头，则值为`0`。
+  比如：
+  书签的字符串为`123Bookmark`，则值为`hello`；书签的字符串为`123Bookmark`，则值为`0`。
+* `PhonemeId`
+  当前音素的ID，详见[SAPI Phoneme set](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431828(v=vs.85))。
+* `VisemeId`
+  当前视位的ID，详见[SAPI Viseme set](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431873(v=vs.85))。。
+* `dwReserved1`
+  系统保留。
+* `dwReserved2`
+  系统保留。
+
+###### 1.12153 枚举类型SPVPRIORITY
+
+**介绍**
+
+该枚举类型包含语音实例的语音输出优先级状态。用于`ISpVoice::SetPriority`和 `ISpVoice::GetPriority`函数。
+
+以下是枚举类型`SPVPRIORITY`的定义
+```c++
+typedef enum SPVPRIORITY
+{
+    SPVPRI_NORMAL,
+    SPVPRI_ALERT,
+    SPVPRI_OVER
+} SPVPRIORITY;
+```
+
+**成员**
+
+* `SPVPRI_NORMAL`
+  正常优先级，也是文本语音输出的默认优先级。
+* `SPVPRI_ALERT`
+  警告优先级，优先级比正常优先级要高。
+* `SPVPRI_OVER`
+  超优先级，该优先级的语音输出会与其他优先级的同时输出。
+
+###### 1.12154 枚举类型SPEVENTENUM
+
+**介绍**
+
+该枚举类型包含SAPI中的所有事件类型。
+
+一般推荐用辅助类`CSpEvent`来获取和处理事件。
+
+以下是枚举类型`SPEVENTENUM`的定义
+```c++
+typedef enum SPEVENTENUM
+{
+    SPEI_UNDEFINED,
+
+    //--- TTS engine
+    SPEI_START_INPUT_STREAM,
+    SPEI_END_INPUT_STREAM,
+    SPEI_VOICE_CHANGE,
+    SPEI_TTS_BOOKMARK,
+    SPEI_WORD_BOUNDARY,
+    SPEI_PHONEME,
+    SPEI_SENTENCE_BOUNDARY,
+    SPEI_VISEME,
+    SPEI_TTS_AUDIO_LEVEL,
+
+    //--- Engine vendors use these reserved bits
+    SPEI_TTS_PRIVATE,
+    SPEI_MIN_TTS,
+    SPEI_MAX_TTS,
+
+    //--- Speech Recognition
+    SPEI_END_SR_STREAM,
+    SPEI_SOUND_START,
+    SPEI_SOUND_END,
+    SPEI_PHRASE_START,
+    SPEI_RECOGNITION,
+    SPEI_HYPOTHESIS,
+    SPEI_SR_BOOKMARK,
+    SPEI_PROPERTY_NUM_CHANGE,
+    SPEI_PROPERTY_STRING_CHANGE,
+    SPEI_FALSE_RECOGNITION,
+    SPEI_INTERFERENCE,
+    SPEI_REQUEST_UI,
+    SPEI_RECO_STATE_CHANGE,
+    SPEI_ADAPTATION,
+    SPEI_START_SR_STREAM,
+    SPEI_RECO_OTHER_CONTEXT,
+    SPEI_SR_AUDIO_LEVEL,
+    SPEI_SR_RETAINEDAUDIO,
+
+    //--- Engine vendors use this reserved value.
+    SPEI_SR_PRIVATE,
+
+    SPEI_ACTIVE_CATEGORY_CHANGED, 
+
+    //--- Reserved for system use.
+    SPEI_RESERVED5,         
+    SPEI_RESERVED6,  
+
+    SPEI_MIN_SR,
+    SPEI_MAX_SR,
+
+    //--- Reserved: Do not use
+    SPEI_RESERVED1,
+    SPEI_RESERVED2,
+    SPEI_RESERVED3
+} SPEVENTENUM;
+```
+
+**成员**
+
+* `SPEI_START_INPUT_STREAM`
+  某朗读请求开始处理(开始合成)。
+* `SPEI_END_INPUT_STREAM`
+  某朗读请求处理完毕(合成完毕)。
+* `SPEI_VOICE_CHANGE`
+  当朗读请求的单一输入流改变时，将会触发该事件。
+  `wParam`参数被设置为`0`或者`SPF_PERSIST_XML`(如果当前请求设置了`SPF_PERSIST_XML`，则为`SPF_PERSIST_XML`，否则为`0`)；`lParam`参数被设置为当前语音实例的令牌；`elParamType`参数被设置为`SPET_LPARAM_IS_TOKEN`。
+* `SPEI_TTS_BOOKMARK`
+  书签是用于对朗读输出时某些阶段标记，如果实例的朗读输出中的某些阶段被标记，则当程序进行到这些阶段时，会触发该事件。
+  `wParam`参数被设置为当前书签的字符串转换为的10进制数的值，如果字符串不为数字字符开头，则值为`0`；`lParam`参数被设置为当前书签的字符串；`elParamType`参数被设置为`SPET_LPARAM_IS_STRING`。
+* `SPEI_WORD_BOUNDARY`
+  表示开始合成某个词语。XML格式的字符串将会在边界和偏移量中计算。
+  `wParam`参数被设置为当前词语的字符长度；`lParam`参数被设置为当前词语在所在输入流文本中的位置。
+* `SPEI_PHONEME`
+  音素合成事件，每次音素合成都会触发该事件。
+  `wParam`参数的高位字节被设置为当前音素发音的持续时间(毫秒)，低位字节被设置为下一个音素的ID号；`lParam`参数的高位字节被设置为当前音素的特征类型(特征类型由[枚举类型SPVFEATURE](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431872(v=vs.85))定义，比如如果该音素不为主重音或强调，则特征类型的值为0)，低位字节被设置为当前音素的ID号。
+  当TTS引擎要合成一个由多个音素组成的音素时，每个音素成员都会触发一次该事件。比如：
+  当日语TTS引擎要合成音素kya(拗音)时，kya由音素ki和ya组成(清音)，所以就会触发两个该事件。并且因为音素ki的作用用于修改后面音素的声音，而不是自己发出声音，所以音素ki的发音的持续时间为0。
+* `SPEI_SENTENCE_BOUNDARY`
+  表示开始合成某个语句。
+  `wParam`参数被设置为当前语句的字符长度；`lParam`参数被设置为当前语句在所在输入流文本中的位置。
+* `SPEI_VISEME`
+  视位(即音素到嘴形的映射字典)事件，每次视位变化都会触发该事件。
+  `wParam`参数的高位字节被设置为当前视位的持续时间(毫秒)，低位字节被设置为下一个视位的[SPVISEMES类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431873(v=vs.85))；`lParam`参数的高位字节被设置为当前视位的特征类型(特征类型由[枚举类型SPVFEATURE](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431872(v=vs.85))定义，比如如果该视位不为主重音或强调，则特征类型的值为0)，低位字节被设置为当前视位的[SPVISEMES类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431873(v=vs.85))。
+* `SPEI_TTS_AUDIO_LEVEL`
+  表示实例当前音量等级。
+  `wParam`参数被设置为当前音量等级[`0`, `100`]；`lParam`参数被设置为`0`。
+* `SPEI_TTS_PRIVATE`
+  保留给TTS引擎的内部专门使用。
+* `SPEI_MIN_TTS`
+  TTS事件的最小枚举值。
+* `SPEI_MAX_TTS`
+  TTS事件的最大枚举值。
+* `SPEI_END_SR_STREAM`
+  表示SR引擎已经完成音频输入流的接收。
+  `wParam`参数被设置为指向SR引擎的返回结果值HRESULT的指针(可用辅助函数`CSpEvent::EndStreamResult`来取得)；`lParam`参数被设置为指向一个布尔值的指针，该布尔值表示音频输入流是否被释放(可用辅助函数`CSpEvent::InputStreamReleased`来取得)。
+* `SPEI_SOUND_START`
+  表示SR引擎判断音频输入流中有可用的声音。
+* `SPEI_SOUND_END`
+  表示SR引擎判断音频输入流中没有可用的声音，或者声音流已经停止一段时间了。
+* `SPEI_PHRASE_START`
+  表示SR引擎开始识别一个短语。
+  要注意该事件要配合`SPEI_FALSE_RECOGNITION`和`SPEI_RECOGNITION`事件一起使用，来判断某词语是否识别成功。
+* `SPEI_RECOGNITION`
+  表示SR引擎正在返回一个完整的成功的语句识别，该识别是对音频数据的最佳猜测。
+  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含一些识别信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
+* `SPEI_HYPOTHESIS`
+  表示SR引擎正在返回一个部分的短语识别，该识别是当前声音流中该短语的最佳猜测。
+  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含一些识别信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
+* `SPEI_SR_BOOKMARK`
+  书签事件，当SR引擎已经处理完输入流中由书签标记的位置时，就会触发该事件。
+  `wParam`参数被设置为`SPREF_AutoPause`(如果`ISpRecoContext::Bookmark`被`SPBO_PAUSE`调用)，否则为0；`lParam`参数被设置为`ISpRecoContext::Bookmark`中设置的值。
+* `SPEI_PROPERTY_NUM_CHANGE`
+  表示SR引擎所支持的属性值已被更改。
+  `wParam`参数被设置为更改后的新值(可用辅助函数`CSpEvent::PropertyNumValue`来取得)；`lParam`参数被设置为指向代表该属性名的字符串(可用辅助函数`CSpEvent::PropertyName`来取得)。
+* `SPEI_PROPERTY_STRING_CHANGE`
+  表示SR引擎所支持的属性名已被更改。
+  `lParam`参数被设置为指向更改后的代表该属性名的字符串(可用辅助函数`CSpEvent::PropertyName`来取得)，紧跟在该字符串空字符的是该属性的值(可用辅助函数`CSpEvent::PropertyStringValue`来取得)。
+* `SPEI_FALSE_RECOGNITION`
+  表示SR引擎对当前声音没有有效的识别(识别失败)。
+  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含一些识别信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
+* `SPEI_INTERFERENCE`
+  表示SR引擎判断当前声音有干扰，该干扰妨碍了声音的成功识别。
+  `lParam`参数被设置为[SPINTERFERENCE类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431851(v=vs.85))对象，该对象包含该干扰信息(可用辅助函数`CSpEvent::Interference`来取得)。
+* `SPEI_REQUEST_UI`
+  表示SR引擎请求显示一个具体的用户界面(UI)。
+  `lParam`参数被设置为一个以空字符结尾的字符串(可用辅助函数`CSpEvent::RequestTypeOfUI`来取得)。
+* `SPEI_RECO_STATE_CHANGE`
+  表示识别器实例状态已被改变。
+  `wParam`参数被设置为新的[识别器状态](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431860(v=vs.85))(可用辅助函数`CSpEvent::RecoState`来取得)。
+* `SPEI_ADAPTATION`
+  表示SR引擎准备处理适应器缓存。
+* `SPEI_START_SR_STREAM`
+  表示SR引擎到达一个新的声音流的开始。
+* `SPEI_SR_AUDIO_LEVEL`
+  由音频输入流触发该事件，表示该音频输入流的音频大小([`0`,`100`])。
+* `SPEI_SR_RETAINEDAUDIO`
+  表示返回一个最近发送给识别器的音频数据。
+* `SPEI_RECO_OTHER_CONTEXT`
+  表示识别结果被发送到了上下文。
+* `SPEI_SR_PRIVATE`
+  保留给SR引擎的内部专门使用。
+* `SPEI_ACTIVE_CATEGORY_CHANGED`
+  表示当前实例的SR识别器类型被改变。
+  `wParam`和`lParam`参数都为空。
+* `SPEI_RESERVED5`
+  保留给系统使用。
+* `SPEI_RESERVED6`
+  保留给系统使用。
+* `SPEI_MIN_SR`
+  SR事件的最小枚举值。
+* `SPEI_MAX_SR`
+  SR事件的最大枚举值。
+* `SPEI_RESERVED1`
+  保留给SAPI内部使用。详见[SPFEI介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450731(v=vs.85))。
+* `SPEI_RESERVED2`
+  保留给SAPI内部使用。详见[SPFEI介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450731(v=vs.85))。
+* `SPEI_RESERVED3`
+  保留给未来使用。
+
+###### 1.12155 结构体SPEVENT
+
+**介绍**
+
+该结构体包含SAPI中的事件信息。这些事件由TTS、SR引擎或者音频设备返回。
+
+对于事件信息对象来说，我们可以使用辅助函数`SpClearEvent`来清除该对象中的事件信息。
+
+以下是结构体`SPEVENT`的定义
+```c++
+typedef struct SPEVENT
+{
+    WORD         eEventId;
+    WORD         elParamType;
+    ULONG        ulStreamNum;
+    ULONGLONG    ullAudioStreamOffset;
+    WPARAM       wParam;
+    LPARAM       lParam;
+} SPEVENT;
+```
+
+**成员**
+
+* `eEventId`
+  表示事件类型ID(由枚举类型`SPEVENTENUM`表示的)。
+* `elParamType`
+  表示在`lParam`参数中的相关数据签名。
+  我们需要在使用完事件后释放该相关数据，详见[SPEVENTLPARAMTYPE类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431846(v=vs.85))。
+* `ulStreamNum`
+  表示与事件相关的流编号。
+  对于TTS来说，每次朗读请求后流编号会增加(用 `ISpVoice::SpeakStream`和`ISpVoice::Speak`函数)。
+  对于SR来说，每次声音流被打开后流编号会增加(用`ISpSREngine::RecognizeStream`函数)，注意单一声音流可以被打开多次(比如缓冲区溢出、设备出错、识别状态改变等)。
+* `ullAudioStreamOffset`
+  表示与事件相关的音频流字节偏移量。
+  对于TTS来说，表示输出流中的已合成数据的最后位置。
+  对于SR来说，表示正在识别的输出流开始位置。
+* `wParam`
+  通用的字节段。
+  对于`lParam`参数为指针的事件来说，该参数表示`lParam`参数指向的数据的字节大小；对于其他某些事件，会有特殊的含义。
+* `lParam`
+  通用的字节段。
+  对于`lParam`参数为指针的事件来说，该参数是由`CoTaskMemAlloc`函数所分配的，调用者需要用`CoTaskMemFree`函数或者辅助函数`SpClearEvent`来释放该内存；对于其他某些事件，会有特殊的含义。
+
+###### 1.12156 辅助类CSpEvent
+
+**介绍**
+
+辅助类`CSpEvent`是用于操作SAPI中的事件而创建的类，方便我们操纵与使用各种事件。
+
+该类的函数都是将一些接口的原生函数组合在一起操作的函数，作用和不用该函数的原生操作一样，只不过方便了许多。
+
+该类的具体函数及其使用详见[CSpEvent介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431916(v=vs.85))。
+
+### 1.13 实现SR的流程
+
+和TTS类似，实现SR的核心接口为`ISpRecoContext`接口，但与TTS中的`ISpVoice`接口不同，`ISpRecoContext`接口虽然为核心接口，但是它并不能完成所有的SR操作。
+对于SR，我们需要语音识别器、语法分析器和上下文。而`ISpRecoContext`接口只是上下文，我们还需要创建语音识别器接口`ISpRecognizer`和语法分析器接口`ISpRecoGrammar`并将它们关联起来。
+
+在这三个接口中，最基础的是语音识别器接口`ISpRecognizer`，该接口用于控制SR引擎的各个方面，一个识别器实例可以关联多个上下文(不过同一时间只能关联一个)。
+根据SR引擎的类型，可以创建两种不同类型的识别器，每种识别器代表一种类型的SR引擎：
+* 共享识别器
+  共享识别器是可以与其他程序共享的识别器类型，该识别器使用共享型SR引擎。
+  共享型SR引擎被创建在另一个进程中，一个操作系统同一个时间只能有一个共享型SR引擎在运行，所有使用共享型SR引擎的程序都会连接到同一个共享识别器。
+* 进程内识别器
+  进程内识别器是创建该识别器的程序才能使用的识别器类型，该识别器使用进程内SR引擎。
+  进程内SR引擎被创建在该进程中，其他程序不能使用该SR引擎。
+
+上下文接口`ISpRecoContext`作为SR中的核心接口，承担着连接其他接口(可以与识别器和语法分析器连接)和接收事件的作用。
+上下文和识别器一样，有类型的区别，且其类型和识别器的一样。这表示上下文能够关联的识别器类型，不同类型的上下文和识别器之间不能关联。
+上下文继承了`ISpEventSource`接口，还可以关联不同的语法分析器，所以我们可以创建对不同事件该兴趣的，关联不同语法分析器的上下文实例，从而用于程序的不同使用场景。
+
+语法分析器接口`ISpRecoContext`是SR中的另一个必要的接口，语法分析器用于设置SR引擎可以识别的单词和词组(可用XML文本来设置)。
+一个语法分析器实例也可以关联多个上下文(不过同一时间只能关联一个)，由此可以设置多个不同的语法分析器来满足程序的不同场景需求。
+所有的语法分析器实例可以同时支持两种不同的语法模式——上下文无关语法和命令式语法，当实例使用其中一种语法分析失败时，可以自动切换到另一种语法继续分析。
+
+常规的SR操作流程大致为以下几个步骤：
+1. 创建上下文、识别器和语法分析器实例，然后将它们关联起来(比如先创建这3个接口的指针，然后创建一个上下文实例，再用上下文实例中的函数来创建识别器(同类型的)和语法分析器实例，此时就会自动关联在一起了)。
+2. 设置识别器中的一些属性，比如SR引擎所用的输入流等；设置上下文中的一些属性，尤其是要设置感兴趣事件，其中`SPEI_RECOGNITION`事件不能缺少，这样我们才能在语音识别成功后对其进行某些操作，比如获取识别的文本等。
+3. 设置语法分析器中的语法，创建SR引擎能够识别的单词句子，其中最方便的是用XML文本进行设置。
+4. 编写事件处理代码，使其可以对感兴趣的事件进行操作。
+   事件处理代码要能够持续监视事件队列，从而识别器能够有时间进行语音识别。
+   可以使用循环结构或者使用sapi的消息通知机制来实现持续监视功能。
+5. 最后激活刚才设置的语法，并使识别器处于活动状态，这样就完成了SR操作的实现。
+
+以下是一个简单的SR操作示例，实现了语音转文本：
+```c++
+#include <sapi.h>
+#include <sphelper.h>
+#include <stdio.h>
+#include <locale.h>
+
+void trace(const char* strs) { printf("%s\n", strs); }
+
+void __stdcall sp_callback(WPARAM wParam, LPARAM lParam);
+
+struct My_sp
+{
+    CComPtr<ISpVoice>cpIspv;
+    CComPtr<ISpRecognizer>cpIsprEng;
+    CComPtr<ISpRecoContext>cpIsprCntxt;
+    CComPtr<ISpRecoGrammar>cpIsprGramr;
+    My_sp() { trace("the speech project will start"); }
+    virtual ~My_sp() { trace("the speech project finished"); }
+    void text_to_speech(wchar_t strs, long rate, USHORT volume)
+    {
+        if (FAILED(::CoInitialize(NULL)))
+        {
+            trace("TTS:\tInitiate failed!");
+            return;
+        }
+        HRESULT spv_hr = CoCreateInstance(CLSID_SpVoice, NULL, CLSCTX_ALL, IID_ISpVoice, (void**)&cpIspv);
+        if (FAILED(spv_hr))
+        {
+            trace("TTS:\tcreate SpVoice failed!");
+            return;
+        }
+        cpIspv->SetRate(1);
+        cpIspv->SetVolume(100);
+        cpIspv->Speak(L"你好你好", 0, NULL);
+        ::CoUninitialize();
+    }
+    
+    void speech_recognition()
+    {
+        if (FAILED(::CoInitialize(NULL)))
+        {
+            trace("SR:\tInitiate failed!");
+            return;
+        }
+        if (FAILED(cpIsprCntxt.CoCreateInstance(CLSID_SpSharedRecoContext)))
+        {
+            trace("SR:\tcreate SharedRecoContext failed!");
+            return;
+        }
+        if (FAILED(cpIsprCntxt->GetRecognizer(&cpIsprEng)))
+        {
+            trace("SR:\tcreate SharedRecognizer failed!");
+            return;
+        }
+        ULONGLONG ullEvents = SPFEI(SPEI_SOUND_START) | SPFEI(SPEI_SOUND_END) | SPFEI(SPEI_RECOGNITION);
+        cpIsprCntxt->SetInterest(ullEvents, ullEvents);
+        cpIsprCntxt->CreateGrammar(0, &cpIsprGramr);
+        //if (FAILED(cpIsprCntxt->SetNotifyCallbackFunction(sp_callback, 0, 0)))
+        //{
+        //    trace("SR:\tset CallbackFunction failed!");
+        //    return;
+        //}
+        HRESULT                       hr = S_OK;
+        SPSTATEHANDLE                 hStateTravel = NULL;
+        hr = cpIsprGramr->GetRule(L"Test", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+        if (SUCCEEDED(hr))
+        {
+            hr = cpIsprGramr->AddWordTransition(hStateTravel, NULL, L"我要", NULL, SPWT_LEXICAL, 1, NULL);
+        }
+        if (SUCCEEDED(hr))
+        {
+            hr = cpIsprGramr->AddWordTransition(hStateTravel, NULL, L"吃鸡", NULL, SPWT_LEXICAL, 1, NULL);
+        }
+        if (SUCCEEDED(hr))
+        {
+            hr = cpIsprGramr->AddWordTransition(hStateTravel, NULL, L"手机", NULL, SPWT_LEXICAL, 1, NULL);
+        }
+        if (SUCCEEDED(hr))
+        {
+            hr = cpIsprGramr->Commit(0);
+        }
+        // Declare local identifiers:
+        //WCHAR wszXMLFile[20] = L"";//加载语法
+        //MultiByteToWideChar(CP_ACP, 0, (LPCSTR)"CmdCtrl.xml", -1, wszXMLFile, 256);//ANSI转UNINCODE
+        //cpIsprGramr->LoadCmdFromFile(wszXMLFile, SPLO_DYNAMIC);
+        cpIsprGramr->SetRuleState(L"Test", NULL, SPRS_ACTIVE);
+        cpIsprEng->SetRecoState(SPRST_ACTIVE);
+        //MSG msg;
+        //while (GetMessage(&msg, NULL, 0, 0))
+        //{
+        //    TranslateMessage(&msg);
+        //    DispatchMessage(&msg);
+        //}
+        CSpEvent cspEvt;
+        SPEVENTSOURCEINFO spEvntInfo;
+        while (SUCCEEDED(cspEvt.GetFrom(cpIsprCntxt)))
+        {
+            //cpIsprCntxt->GetInfo(&spEvntInfo);
+            //printf("the event amount is %d\n", (int)spEvntInfo.ulCount);
+            switch (cspEvt.eEventId)
+            {
+            //case SPEI_SOUND_START:
+            //{
+            //    trace("SR:\tstarted recognition!");
+            //    break;
+            //}
+            //case SPEI_SOUND_END:
+            //{
+            //    trace("SR:\tFinish recognition!");
+            //    break;
+            //}
+            case SPEI_RECOGNITION:
+            {
+                wchar_t* pwszText;
+                if (SUCCEEDED(cspEvt.RecoResult()->GetText(SP_GETWHOLEPHRASE, SP_GETWHOLEPHRASE, TRUE, &pwszText, NULL)))
+                    printf("%ls\n", pwszText);
+                break;
+            }
+            default:
+                break;
+            }
+        }
+        ::CoUninitialize();
+    }
+};
+
+My_sp my_speech;
+
+//void __stdcall sp_callback(WPARAM wParam, LPARAM lParam)
+//{
+//    static int count = 0;
+//    printf("call times:\t%d\n", ++count);
+//    SPEVENT Spevt;
+//    SPEVENTSOURCEINFO spEvntInfo;
+//    if (SUCCEEDED(my_speech.cpIsprCntxt->GetEvents(1, &Spevt, NULL)))
+//    {
+//        my_speech.cpIsprCntxt->GetInfo(&spEvntInfo);
+//        printf("the event amount is %d\n", (int)spEvntInfo.ulCount);
+//        switch (Spevt.eEventId)
+//        {
+//            case SPEI_SOUND_START:
+//            {
+//                trace("SR:\tstarted recognition!");
+//                break;
+//            }
+//            case SPEI_SOUND_END:
+//            {
+//                trace("SR:\tFinish recognition!");
+//                break;
+//            }
+//            case SPEI_RECOGNITION:
+//            {
+//                CComPtr<ISpRecoResult>cpIsprRes = (ISpRecoResult*)Spevt.lParam;
+//                SPPHRASE* pSph;
+//                wchar_t *pwszText;
+//                if (SUCCEEDED(cpIsprRes->GetPhrase(&pSph)))
+//                {
+//                    cpIsprRes->GetText(SP_GETWHOLEPHRASE, SP_GETWHOLEPHRASE, TRUE, &pwszText, NULL);
+//                    printf("%ls\n", pwszText);
+//                }
+//                break;
+//            }
+//            default:
+//                break;
+//        }
+//    }
+//}
+
+int main()
+{
+    setlocale(LC_ALL, "zh-CN");
+    my_speech.speech_recognition();
+    return 0;
+}
+```
+
+#### 1.131 该例所用接口和类的解析
+
+##### 1.1311 ISpRecoContext接口常用函数
+
+上下文接口`ISpRecoContext`作为SR中的核心接口，承担着连接其他接口(可以与识别器和语法分析器连接)和接收事件的作用。
+上下文和识别器一样，有类型的区别，且其类型和识别器的一样。这表示上下文能够关联的识别器类型，不同类型的上下文和识别器之间不能关联。
+上下文继承了`ISpEventSource`接口，还可以关联不同的语法分析器，所以我们可以创建对不同事件该兴趣的，关联不同语法分析器的上下文实例，从而用于程序的不同使用场景。
+
+##### 1.1312 ISpRecognizer接口常用函数
+
+该接口用于控制SR引擎的各个方面，一个识别器实例可以关联多个上下文(不过同一时间只能关联一个)。
+根据SR引擎的类型，可以创建两种不同类型的识别器，每种识别器代表一种类型的SR引擎：
+* 共享识别器
+  共享识别器是可以与其他程序共享的识别器类型，该识别器使用共享型SR引擎。
+  共享型SR引擎被创建在另一个进程中，一个操作系统同一个时间只能有一个共享型SR引擎在运行，所有使用共享型SR引擎的程序都会连接到同一个共享识别器。
+* 进程内识别器
+  进程内识别器是创建该识别器的程序才能使用的识别器类型，该识别器使用进程内SR引擎。
+  进程内SR引擎被创建在该进程中，其他程序不能使用该SR引擎。
+
+##### 1.1313 ISpRecoGrammar接口常用函数
+
+语法分析器接口`ISpRecoContext`是SR中的另一个必要的接口，语法分析器用于设置SR引擎可以识别的单词和词组(可用XML文本来设置)。
+一个语法分析器实例也可以关联多个上下文(不过同一时间只能关联一个)，由此可以设置多个不同的语法分析器来满足程序的不同场景需求。
+所有的语法分析器实例可以同时支持两种不同的语法模式——上下文无关语法和命令式语法，当实例使用其中一种语法分析失败时，可以自动切换到另一种语法继续分析。
+
