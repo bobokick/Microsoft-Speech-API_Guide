@@ -7,7 +7,7 @@
 
 sapi语音引擎最后一个版本为5.4版本，微软虽然不再提供下载渠道，但是之前的教程还是存在，所以我们可以在[微软sapi 5.4教程](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125077(v=vs.85))中学习sapi的使用。
 
-接下来，我就要基于该教程在Windows10系统上来介绍sapi 5.4的使用。
+接下来，我就基于该教程在Windows10系统上来介绍sapi 5.4的使用。
 
 ## 1.1 sapi入门
 
