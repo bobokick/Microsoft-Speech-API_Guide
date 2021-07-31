@@ -1761,6 +1761,79 @@ int main()
   所以我们要将转换后的状态地址要为`NULL`。
   3. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
   其中的参数必须设为`0`。
+  ```c++
+  // Declare local identifiers:
+  HRESULT                       hr = S_OK;
+  CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
+  SPSTATEHANDLE                 hStateTravel;
+  SPSTATEHANDLE                 hStateTravel_Second;
+  SPSTATEHANDLE                 hStateMethod;
+  SPSTATEHANDLE                 hStateDest;
+
+  // Create (if rule does not already exist)
+  // top-level Rule, defaulting to Active.
+  hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+
+  // Approach 1: list all possible phrases--
+  // This is the most intuitive approach, and it does not sacrifice efficiency
+  // because the grammar builder will merge shared sub-phrases when possible.
+  // Internally, SAPI may break the transitions into separate transitions if
+  // there are common roots (e.g. "fly to Seattle" and "fly to New York").
+  // There is only one root state, hStateTravel, and the terminal NULL state,
+  // and there are 6 unique transitions between root state and NULL state.
+
+  /* XML Approximation:
+     <RULE NAME="Travel" TOPLEVEL="ACTIVE">
+        <PHRASE>fly to Seattle</PHRASE>
+        <PHRASE>fly to New York</PHRASE>
+        <PHRASE>fly to Washington DC</PHRASE>
+        <PHRASE>drive to Seattle</PHRASE>
+        <PHRASE>drive to New York</PHRASE>
+        <PHRASE>drive to Washington DC</PHRASE>
+     </RULE>
+  */
+
+  // Create set of peer phrases, each containing complete phrase.
+  // Note: the word delimiter is set as " ", so that the text we
+  // attach to the transition can be multiple words (for example,
+  // "fly to Seattle" is implicitly "fly" + "to" + "Seattle"):
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to New York", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to New York", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  // Must Commit before the grammar changes before using the grammar.
+  // NOTE: grammar changes are only given to the engine at synchronize
+  // points (see ISpSREngineSite::Synchronize).
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->Commit(0);
+  }
+
+  if (SUCCEEDED(hr))
+  {
+     // Do some more stuff here.
+  }
+  ```
 * 单规则，有中间状态：
   1. 和其他创建方法一样，使用`ISpGrammarBuilder::GetRule`函数创建一个语法规则。
   2. 使用`ISpGrammarBuilder::CreateNewState`函数创建该规则的中间状态。
@@ -1768,6 +1841,93 @@ int main()
   3. 和其他创建方法一样，使用`ISpGrammarBuilder::AddWordTransition`函数设置同规则状态转换方法，转换后的状态地址要为`NULL`。
   4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
   其中的参数必须设为`0`。
+  ```c++
+  // Declare local identifiers:
+  HRESULT                       hr = S_OK;
+  CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
+  SPSTATEHANDLE                 hStateTravel;
+  SPSTATEHANDLE                 hStateTravel_Second;
+  SPSTATEHANDLE                 hStateMethod;
+  SPSTATEHANDLE                 hStateDest;
+
+  // Create (if rule does not already exist)
+  // top-level Rule, defaulting to Active.
+  hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+
+  // Approach 2: construct the directed-graph using intermediate states--
+  // This approach gives you more control of the grammar layout, and may be
+  // easier to implement when you have some combinations.
+  // Using this approach, there is one root state (hStateTravel), one interim state
+  // (hStateTravel_Second), and the final terminal NULL state. There are three
+  // unique transitions between the root state and the interim state. And there are
+  // three more unique transitions between the interim state, and the final NULL state.
+  // Note that graph includes only 2-transition paths. The user is not capable of saying
+  // only the first transition or the second transition (e.g. "fly to" is an invalid
+  // phrase as is "Seattle", but "fly to Seattle" is valid.)
+
+  /* XML Approximation:
+     <RULE NAME="Travel" TOPLEVEL="ACTIVE">
+        <LIST>
+           <PHRASE>fly to</PHRASE>
+           <PHRASE>drive to</PHRASE>
+           <PHRASE>take train to</PHRASE>
+        </LIST>
+        <LIST>
+           <PHRASE>Seattle</PHRASE>
+           <PHRASE>New York</PHRASE>
+           <PHRASE>Washington DC</PHRASE>
+        </LIST>
+     </RULE>
+  */
+
+  // Create a new transition which starts at
+  // the root state and ends at a second state.
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->CreateNewState(hStateTravel, &hStateTravel_Second);
+  }
+
+  // Attach the first part of the phrase to to first transition:
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"fly to", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"drive to", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"take train to", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+
+  // Attach the second and final part of the phrase to
+  // the last transition (ending with the NULL state):
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"New York", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  // Must Commit before the grammar changes before using the grammar.
+  // NOTE: grammar changes are only given to the engine at synchronize
+  // points (see ISpSREngineSite::Synchronize).
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->Commit(0);
+  }
+
+  if (SUCCEEDED(hr))
+  {
+     // Do some more stuff here.
+  }
+  ```
 * 多规则：
   1. 使用`ISpGrammarBuilder::GetRule`函数创建多个语法规则。
   2. `ISpGrammarBuilder::AddRuleTransition`函数是不同规则之间的状态转换方法。
@@ -1776,3 +1936,120 @@ int main()
   3. 使用`ISpGrammarBuilder::AddWordTransition`函数对所使用的每个规则都设置同规则转换方法，要将转换链中的最后一个规则的转换后的状态地址设为`NULL`。
   4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
   其中的参数必须设为`0`。
+  ```c++
+  // Declare local identifiers:
+  HRESULT                       hr = S_OK;
+  CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
+  SPSTATEHANDLE                 hStateTravel;
+  SPSTATEHANDLE                 hStateTravel_Second;
+  SPSTATEHANDLE                 hStateMethod;
+  SPSTATEHANDLE                 hStateDest;
+
+  // Create (if rule does not already exist)
+  // top-level Rule, defaulting to Active.
+  hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+
+  // Approach 3: Using sub rules--
+  // This approach let you structure the grammars and is useful when building large grammars,
+  // since it allows for reusable component rules (see also the XML Grammar tag, RULEREF).
+  // Note that forward-declarations are allowed, since the grammar validation is not performed
+  // until the XML is compiled or the GrammarBuilder instance is 'Commit'ted.
+  // The main difference between Approach 2 and Approach 3 is the use of component rules, which
+  // are combined into one top-level rule. This facilitates the reuse of the component rules
+  // in other rules (e.g. create a second rule called "Geography" which combines the phrase
+  // "where is" with the "Dest" rule, allowing the user to say "where is New York", without
+  // requiring the grammar author/designer to place the same phrase text in multiple places
+  // of the grammar leading to grammar maintenance problems.
+
+  /* XML Approximation:
+     <RULE NAME="Travel" TOPLEVEL="ACTIVE">
+        <RULEREF NAME="Method"/>
+        <RULEREF NAME="Dest"/>
+     </RULE>
+     <RULE NAME="Method">
+        <LIST>
+           <PHRASE>fly to</PHRASE>
+           <PHRASE>drive to</PHRASE>
+           <PHRASE>take train to</PHRASE>
+        </LIST>
+     </RULE>
+     <RULE NAME="Dest" DYNAMIC="TRUE">
+        <LIST>
+           <PHRASE>Seattle</PHRASE>
+           <PHRASE>New York</PHRASE>
+           <PHRASE>Washington DC</PHRASE>
+        </LIST>
+     </RULE>
+  */
+
+  if (SUCCEEDED(hr))
+  {
+     // Note the two new rules ("Method" & "Dest") are NOT marked Top-level, since they are
+     // reused by other top-level rules, and are not by themselves recognizable phrases:
+     hr = cpGrammarBuilder->GetRule(L"Method", 0, 0, TRUE, &hStateMethod);
+  }
+  if (SUCCEEDED(hr))
+  {
+     // Marking the "Dest" rules as Dynamic allows the programmatic grammar author to
+     // update only the "Dest" rule after the initial ::Commit (e.g. to add more travel
+     // destinations depending on user history, preferences, or geographic data):
+     hr = cpGrammarBuilder->GetRule(L"Dest", 0, SPRAF_Dynamic, TRUE, &hStateDest);
+  }
+
+  if (SUCCEEDED(hr))
+  {
+     // Create an interim state (same as Approach 2).
+     hr = cpGrammarBuilder->CreateNewState(hStateTravel, &hStateTravel_Second);
+  }
+
+  // Then attach rules to the transitions from Root->Interim and Interim->NULL state:
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddRuleTransition(hStateTravel, hStateTravel_Second, hStateMethod, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddRuleTransition(hStateTravel_Second, NULL, hStateDest, 1, NULL);
+  }
+
+  // Add the set of sibling transitions for travel "method":
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"fly to", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"drive to", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"take train to", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+
+  // Add the set of sibling transitions for travel "destinations":
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"New York", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+  }
+  // Must Commit before the grammar changes before using the grammar.
+  // NOTE: grammar changes are only given to the engine at synchronize
+  // points (see ISpSREngineSite::Synchronize).
+  if (SUCCEEDED(hr))
+  {
+     hr = cpGrammarBuilder->Commit(0);
+  }
+
+  if (SUCCEEDED(hr))
+  {
+     // Do some more stuff here.
+  }
+  ```
+
