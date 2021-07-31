@@ -1118,9 +1118,9 @@ typedef enum SPEAKFLAGS
 * `SPF_NLP_SPEAK_PUNC`
   指示将所给的字符串中的标点符号当做词来朗读。
 * `SPF_PARSE_SAPI`
-  强制将XML格式文本当做MS SAPI来进行语法分析。
+  强制将XML格式文本当做MS SAPI来进行语法设置。
 * `SPF_PARSE_SSML`
-  强制将XML格式文本当做W3C SSML来进行语法分析。
+  强制将XML格式文本当做W3C SSML来进行语法设置。
 * `SPF_PARSE_AUTODETECT`
   XML的格式由系统自动判断，如果XML格式中的文本没有格式指明，则该方式为XML的默认格式。
 * `SPF_NLP_MASK`
@@ -1452,7 +1452,7 @@ typedef struct SPEVENT
 ### 1.13 实现SR的流程
 
 和TTS类似，实现SR的核心接口为`ISpRecoContext`接口，但与TTS中的`ISpVoice`接口不同，`ISpRecoContext`接口虽然为核心接口，但是它并不能完成所有的SR操作。
-对于SR，我们需要语音识别器、语法分析器和上下文。而`ISpRecoContext`接口只是上下文，我们还需要创建语音识别器接口`ISpRecognizer`和语法分析器接口`ISpRecoGrammar`并将它们关联起来。
+对于SR，我们需要语音识别器、语法设置器和上下文。而`ISpRecoContext`接口只是上下文，我们还需要创建语音识别器接口`ISpRecognizer`和语法设置器接口`ISpRecoGrammar`并将它们关联起来。
 
 在这三个接口中，最基础的是语音识别器接口`ISpRecognizer`，该接口用于控制SR引擎的各个方面，一个识别器实例可以关联多个上下文(不过同一时间只能关联一个)。
 根据SR引擎的类型，可以创建两种不同类型的识别器，每种识别器代表一种类型的SR引擎：
@@ -1463,22 +1463,22 @@ typedef struct SPEVENT
   进程内识别器是创建该识别器的程序才能使用的识别器类型，该识别器使用进程内SR引擎。
   进程内SR引擎被创建在该进程中，其他程序不能使用该SR引擎。
 
-上下文接口`ISpRecoContext`作为SR中的核心接口，承担着连接其他接口(可以与识别器和语法分析器连接)和接收事件的作用。
+上下文接口`ISpRecoContext`作为SR中的核心接口，承担着连接其他接口(可以与识别器和语法设置器连接)和接收事件的作用。
 上下文和识别器一样，有类型的区别，且其类型和识别器的一样。这表示上下文能够关联的识别器类型，不同类型的上下文和识别器之间不能关联。
-上下文继承了`ISpEventSource`接口，还可以关联不同的语法分析器，所以我们可以创建对不同事件该兴趣的，关联不同语法分析器的上下文实例，从而用于程序的不同使用场景。
+上下文继承了`ISpEventSource`接口，还可以关联不同的语法设置器，所以我们可以创建对不同事件该兴趣的，关联不同语法设置器的上下文实例，从而用于程序的不同使用场景。
 
-语法分析器接口`ISpRecoGrammar`是SR中的另一个必要的接口，语法分析器用于设置SR引擎可以识别的单词和词组(可用XML文本来设置)。
-一个语法分析器实例也可以关联多个上下文(不过同一时间只能关联一个)，由此可以设置多个不同的语法分析器来满足程序的不同场景需求。
-所有的语法分析器实例可以同时支持两种不同的语法模式：
+语法设置器接口`ISpRecoGrammar`是SR中的另一个必要的接口，语法设置器用于设置SR引擎可以识别的单词和词组(可用XML文本来设置)。
+一个语法设置器实例也可以关联多个上下文(不过同一时间只能关联一个)，由此可以设置多个不同的语法设置器来满足程序的不同场景需求。
+所有的语法设置器实例可以同时支持两种不同的语法模式：
 * 命令与控制式语法(C&C)
 * 听说式语法(dictation)
 
-当实例使用其中一种语法分析失败时，可以自动切换到另一种语法继续分析。
+当实例使用其中一种语法但识别语音失败时，可以自动切换到另一种语法继续识别。
 
 常规的SR操作流程大致为以下几个步骤：
-1. 创建上下文、识别器和语法分析器实例，然后将它们关联起来(比如先创建这3个接口的指针，然后创建一个上下文实例(此时会自动创建与该实例类型相同的识别器实例并关联)，再用上下文实例中的函数来获取该上下文的识别器实例和创建语法分析器实例，此时就完成了实例的创建并关联)。
+1. 创建上下文、识别器和语法设置器实例，然后将它们关联起来(比如先创建这3个接口的指针，然后创建一个上下文实例(此时会自动创建与该实例类型相同的识别器实例并关联)，再用上下文实例中的函数来获取该上下文的识别器实例和创建语法设置器实例，此时就完成了实例的创建并关联)。
 2. 设置识别器中的一些属性，比如SR引擎所用的输入流等；设置上下文中的一些属性，尤其是要设置感兴趣事件，其中`SPEI_RECOGNITION`事件不能缺少，这样我们才能在语音识别成功后对其进行某些操作，比如获取识别的文本等。
-3. 设置语法分析器中的语法，创建SR引擎能够识别的单词句子，其中最方便的是用XML文本进行设置。
+3. 设置语法设置器中的语法，创建SR引擎能够识别的单词句子，其中最方便的是用XML文本进行设置。
 4. 编写事件处理代码，使其可以对感兴趣的事件进行操作。
    事件处理代码要能够持续监视事件队列，从而识别器能够有时间进行语音识别。
    可以使用循环结构或者使用sapi的消息通知机制来实现持续监视功能。
@@ -1665,8 +1665,8 @@ int main()
 
 ##### 1.1311 ISpRecoContext接口常用函数
 
-上下文接口`ISpRecoContext`继承了`ISpEventSource`接口，还有成员函数支持其关联不同的识别器与语法分析器。
-所以上下文接口的作用是承担连接其他接口(可以与识别器和语法分析器连接)和接收事件。
+上下文接口`ISpRecoContext`继承了`ISpEventSource`接口，还有成员函数支持其关联不同的识别器与语法设置器。
+所以上下文接口的作用是承担连接其他接口(可以与识别器和语法设置器连接)和接收事件。
 
 上下文有类型的区别，且其类型和识别器的一样。这表示上下文能够关联的识别器类型，不同类型的上下文和识别器之间不能关联。
 
@@ -1676,9 +1676,9 @@ int main()
 * 通过识别器实例的`ISpRecognizer::CreateRecoContext`函数来创建对应的上下文实例。
   此方法创建的上下文实例会自动与该识别器关联。
 
-上下文实例关联语法分析器实例的操作只有一种，也就是使用`ISpRecoContext::CreateGrammar`函数来创建一个语法分析器实例并自动关联(我们不能自己创建语法分析器实例来关联)。
+上下文实例关联语法设置器实例的操作只有一种，也就是使用`ISpRecoContext::CreateGrammar`函数来创建一个语法设置器实例并自动关联(我们不能自己创建语法设置器实例来关联)。
 
-上下文实例可以设置所用的语法分析器里C&C或专用语法中的，由SR引擎返回的最大替代词数量(用`ISpRecoContext::SetMaxAlternates`函数)，设置语音识别后是否在[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))中保留该音频(用`ISpRecoContext::SetAudioOptions`函数)，在识别流中插入书签设置(用`ISpRecoContext::Bookmark`函数)，在[序列化结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125140(v=vs.85))中获取[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))(用`ISpRecoContext::DeserializeResult`函数)，设置SR引擎的适应数据用于提高短语句子的识别率(用`ISpRecoContext::SetAdaptationData`函数)，设置上下文实例相关联的`ISpVoice`对象用于语音交互识别(用`ISpRecoContext::SetVoice`函数)，设置语音交互识别中终止并清除朗读请求的SR事件(用`ISpRecoContext::SetVoicePurgeEvent`函数)，设置上下文识别状态用于切换不同的语法(不是语法分析器实例)(用`ISpRecoContext::SetContextState`函数)，等各种操作。
+上下文实例可以设置所用的语法设置器里C&C或专用语法中的，由SR引擎返回的最大替代词数量(用`ISpRecoContext::SetMaxAlternates`函数)，设置语音识别后是否在[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))中保留该音频(用`ISpRecoContext::SetAudioOptions`函数)，在识别流中插入书签设置(用`ISpRecoContext::Bookmark`函数)，在[序列化结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125140(v=vs.85))中获取[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))(用`ISpRecoContext::DeserializeResult`函数)，设置SR引擎的适应数据用于提高短语句子的识别率(用`ISpRecoContext::SetAdaptationData`函数)，设置上下文实例相关联的`ISpVoice`对象用于语音交互识别(用`ISpRecoContext::SetVoice`函数)，设置语音交互识别中终止并清除朗读请求的SR事件(用`ISpRecoContext::SetVoicePurgeEvent`函数)，设置上下文识别状态用于切换不同的语法(不是语法设置器实例)(用`ISpRecoContext::SetContextState`函数)，等各种操作。
 有关设置方面的操作都有默认设置。
 
 ##### 1.1312 ISpRecognizer接口常用函数
@@ -1707,22 +1707,72 @@ int main()
 
 ##### 1.1313 ISpRecoGrammar接口常用函数
 
-语法分析器接口`ISpRecoGrammar`继承了接口`ISpGrammarBuilder`，接口`ISpGrammarBuilder`用于上下文无关语法的语法构建与修改。
-所以语法分析器接口`ISpRecoGrammar`用于设置SR引擎可以识别的单词和词组(可用XML文本来设置)。
+语法设置器接口`ISpRecoGrammar`继承了接口`ISpGrammarBuilder`，接口`ISpGrammarBuilder`用于上下文无关语法的语法规则构建与修改。
+所以语法设置器接口`ISpRecoGrammar`用于设置SR引擎可以识别的单词和词组(可用XML文本来设置，[这里是使用XML文本来构建语法的教程](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125672(v=vs.85)))。
 
-一个语法分析器实例也可以关联多个上下文(不过同一时间只能关联一个)，由此可以设置多个不同的语法分析器来满足程序的不同场景需求。
+一个语法设置器实例也可以关联多个上下文(不过同一时间只能关联一个)，由此可以设置多个不同的语法设置器来满足程序的不同场景需求。
 
-所有的语法分析器实例可以同时支持两种不同的语法模式：
+所有的语法设置器实例可以同时支持两种不同的语法模式：
 * 命令与控制式语法(C&C)，作为上下文无关语法(CFGs)实现
 * 听说式语法(dictation)
 
-当实例使用其中一种语法分析失败时，可以自动切换到另一种语法继续分析。不过语法分析器主要还是依赖C&C语法来进行操作的。
+当实例使用其中一种语法设置失败时，可以自动切换到另一种语法继续设置。不过语法设置器主要还是依赖C&C语法来进行操作的。
 
 语法是语音识别中不可缺少的一部分，语法就是能被识别的一种语音规则。
-语法是由一个或多个语法规则组成的一种结构。其中语法规则由一个或多个短语、单词来组成的，语法规则用来限制该规则所能使用的短语或单词。SR引擎通过使用语法规则来识别音频流中的内容。
+其中，C&C语法是由一个或多个语法规则组成的一种结构。其中语法规则是由零个或多个短语、单词以及其他语法规则组成的，语法规则用来限制该规则所能使用的短语或单词。SR引擎通过使用语法规则来识别音频流中的内容。
+所以说，一个语法规则是由零个或多个短语、单词以及其他语法规则组成的一种结构，它可以是SR引擎识别一种或多种符合该结构的语音句子。
 
-语法分析器中，我们可以自己创建语法或者直接加载已有的语法。一个语法分析器实例中最多只能含有一个C&C语法和听写式语法。
+一个语法规则可以看做一种状态机，它含有开始和终止状态，在这些状态中还可以有中间状态。规则的状态可以由设置的短语来转换，SAPI还支持从一个规则的状态转换到另一个规则的状态，这些状态转换方法可以有多个。
+从规则的开始状态转换到规则的终止状态(可以不是同一个规则)就是一次完整的成功的识别，该次转换中所经过的短语组合就是SR引擎所识别的内容。
 
-以下是创建或加载语法的方法：
+语法设置器中，我们可以自己创建语法或者直接加载已有的语法。一个语法设置器实例中最多只能含有一个C&C语法和听写式语法。
+
+以下是语法相关的方法：
 * 对于C&C语法来说：
-  一个语法分析器实例中可以同时含有多个非专有的语法(如果实例中含有专有语法，则该实例不能)，其中我们可以使用`ISpGrammarBuilder`接口所拥有的函数来创建语法；也可以用各种ISpRecoGrammar::LoadCmdFromXXX函数来加载语法
+  * 创建语法规则：使用`ISpGrammarBuilder`接口所拥有的函数
+  * 直接加载已有的语法：
+  使用各种`ISpRecoGrammar::LoadCmdFromXXX`函数，其中可以加载XML文本中的语法，或者专有语法。
+  在使用这些函数时，需要选择所要加载语法的加载方式，有两种选择——静态加载`SPLO_STATIC`(指的是加载该语法后，在程序运行时不能再修改该语法)，动态加载`SPLO_DYNAMIC`(指的可以在程序运行时根据需要实时修改该语法)。
+  * 设置C&C语法规则状态：
+  使用`ISpRecoGrammar::SetRuleState`或者`ISpRecoGrammar::SetRuleIdState`函数设置某个规则是否激活。
+  * 设置C&C语法状态：
+  使用`ISpRecoGrammar::SetGrammarState`函数设置语法设置器实例中的非专有C&C语法是否激活。
+  * 保存C&C语法状态：
+  `ISpRecoGrammar::SaveCmd`函数使用动态语法来保存语法设置器实例当前的语法状态。
+* 对于听写式语法来说：
+  * 加载或卸载语法：
+  使用`ISpRecoGrammar::LoadDictation`函数加载所要使用的听写语法主题(类型)，并和C&C语法一样需要选择所要加载语法的加载方式。
+  使用`ISpRecoGrammar::UnloadDictation`函数卸载语法设置器实例当前的听写式语法主题，并使用系统默认主题。`SPTOPIC_SPELLING`。
+  * 设置听写式语法状态：
+  使用`ISpRecoGrammar::SetDictationState`函数设置语法设置器实例中的听写式语法主题是否激活。
+
+以下是语法设置器中其他常用函数的介绍：
+* 用于含有文本框程序的函数：
+  使用`ISpRecoGrammar::SetWordSequenceData`和`ISpRecoGrammar::SetWordSequenceData`函数可以让我们使用语音来操作程序文本框中的文字。
+  比如可以选择程序文本框中的某些文字，还可以对其进行信息插入操作。
+* 判断某词语是否有发音：
+  使用`ISpRecoGrammar::IsPronounceable`函数来使SR引擎判断所给的词语是否有发音。
+
+语法构建器接口`ISpGrammarBuilder`是用于上下文无关语法的语法规则构建，根据语法规则的原理，我们有多种方法创建一个语法规则，以下介绍基于语法构建器接口进行语法规则创建的方法：
+* 单规则，无中间状态：
+  1. 使用`ISpGrammarBuilder::GetRule`函数来创建一个语法规则，可以设置该规则的名称、ID号和类型，并获取该规则开始状态的地址。
+  2. `ISpGrammarBuilder::AddWordTransition`函数是同一个规则的状态转换方法，我们需要设置短语来进行状态转换。
+  其中，我们需要输入转换前和转换后的状态地址(转换后的状态地址为`NULL`就代表终止状态)、表示短语的字符串、表示单词分隔符的字符串、单词类型、该转换方法的权重(因为转换方法有多个，当某次识别满足多个转换路径时，优先选择权重高的)和该转换方法的其他设置信息的地址。
+  所以我们要将转换后的状态地址要为`NULL`。
+  3. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
+  其中的参数必须设为`0`。
+* 单规则，有中间状态：
+  1. 和其他创建方法一样，使用`ISpGrammarBuilder::GetRule`函数创建一个语法规则。
+  2. 使用`ISpGrammarBuilder::CreateNewState`函数创建该规则的中间状态。
+  其中，我们需要输入规则的任意一个状态地址和保存新状态地址的指针。
+  3. 和其他创建方法一样，使用`ISpGrammarBuilder::AddWordTransition`函数设置同规则状态转换方法，转换后的状态地址要为`NULL`。
+  4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
+  其中的参数必须设为`0`。
+* 多规则：
+  1. 使用`ISpGrammarBuilder::GetRule`函数创建多个语法规则。
+  2. `ISpGrammarBuilder::AddRuleTransition`函数是不同规则之间的状态转换方法。
+  其中，我们需要输入转换前和转换后的状态地址(转换前的状态必须为执行状态转换之前的语法规则中的状态，转换后的状态必须是另一个语法规则中的状态或者为`NULL`(表示终止状态))、转换后的状态地址所对应的语法规则中的任意一个状态地址、
+  该转换方法的权重(因为转换方法有多个，当某次识别满足多个转换路径时，优先选择权重高的)和该转换方法的其他设置信息的地址。
+  3. 使用`ISpGrammarBuilder::AddWordTransition`函数对所使用的每个规则都设置同规则转换方法，要将转换链中的最后一个规则的转换后的状态地址设为`NULL`。
+  4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
+  其中的参数必须设为`0`。
