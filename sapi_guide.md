@@ -1298,8 +1298,10 @@ typedef enum SPEVENTENUM
 
 * `SPEI_START_INPUT_STREAM`
   某朗读请求开始处理(开始合成)。
+  对于每个同步朗读请求，只会触发该事件一次；但对于每个异步朗读请求，会触发该事件多次(3-5次)。
 * `SPEI_END_INPUT_STREAM`
   某朗读请求处理完毕(合成完毕)。
+  对于每个同步朗读请求，只会触发该事件一次；但对于每个异步朗读请求，会触发该事件多次(3-5次)。
 * `SPEI_VOICE_CHANGE`
   当朗读请求的单一输入流改变时，将会触发该事件。
   `wParam`参数被设置为`0`或者`SPF_PERSIST_XML`(如果当前请求设置了`SPF_PERSIST_XML`，则为`SPF_PERSIST_XML`，否则为`0`)；`lParam`参数被设置为当前语音实例的令牌；`elParamType`参数被设置为`SPET_LPARAM_IS_TOKEN`。
