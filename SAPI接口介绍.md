@@ -1239,6 +1239,137 @@ typedef struct SPEVENT
 上下文实例可以设置所用的语法设置器里C&C或专用语法中的，由SR引擎返回的最大替代词数量(用`ISpRecoContext::SetMaxAlternates`函数)，设置语音识别后是否在[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))中保留该音频(用`ISpRecoContext::SetAudioOptions`函数)，在识别流中插入书签设置(用`ISpRecoContext::Bookmark`函数)，在[序列化结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125140(v=vs.85))中获取[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))(用`ISpRecoContext::DeserializeResult`函数)，设置SR引擎的适应数据用于提高短语句子的识别率(用`ISpRecoContext::SetAdaptationData`函数)，设置上下文实例相关联的`ISpVoice`对象用于语音交互识别(用`ISpRecoContext::SetVoice`函数)，设置语音交互识别中终止并清除朗读请求的SR事件(用`ISpRecoContext::SetVoicePurgeEvent`函数)，设置上下文识别状态用于切换不同的语法(不是语法设置器实例)(用`ISpRecoContext::SetContextState`函数)，等各种操作。
 有关设置方面的操作都有默认设置。
 
+### 6.1 GetRecognizer函数
+
+**介绍**
+
+`ISpRecoContext::GetRecognizer`函数返回一个与该上下文实例相关联的识别器实例的引用。
+
+**函数原型**
+
+```c++
+HRESULT GetRecognizer(ISpRecognizer **ppRecognizer);
+```
+
+**参数**
+
+* `ppRecognizer`
+  [out] 该指针保存指向相关联的识别器实例的指针地址。
+  当使用完该识别器实例时，必须使用函数`IUnknown::Release`来释放该实例。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+
+**示例**
+
+以下示例说明了共享型上下文实例的`ISpRecoContext::GetRecognizer`函数使用：
+```c++
+// Declare local identifiers:
+HRESULT                    hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+CComPtr<ISpRecognizer>     cpRecognizer;
+
+// Create a shared recognition context.
+hr = cpRecoContext.CoCreateInstance(CLSID_SpSharedRecoContext);
+
+if (SUCCEEDED(hr))
+{
+   // Get a reference to the associated recognizer.
+   hr = cpRecoContext->GetRecognizer(&cpRecognizer;);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Assert that our shared context has a shared recognizer.
+   hr = cpRecognizer->IsSharedInstance();
+}
+
+if (SUCCEEDED(hr))
+{
+   // Do something here.
+}
+```
+
+### 6.2 CreateGrammar函数
+
+**介绍**
+
+`ISpRecoContext::CreateGrammar`函数创建一个与该上下文实例相关联的语法设置器实例。
+
+**函数原型**
+
+```c++
+HRESULT CreateGrammar(ULONGLONG ullGrammarId, ISpRecoGrammar **ppGrammar);
+```
+
+**参数**
+
+* `ullGrammarId`
+  [in] 该参数设置语法设置器实例的标识符。
+  该标识符与语法设置器实例相关的语法所产生的结果对象有关(详见[函数`SPPHRASE.ullGrammarID`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125122(v=vs.85)))。
+* `ppGrammar`
+  [out] 该指针保存指向相关联的语法设置器实例的指针地址。
+  当使用完该语法设置器实例时，必须使用函数`IUnknown::Release`来释放该实例。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+* `E_OUTOFMEMORY`
+* `SPERR_SR_ENGINE_EXCEPTION`
+
+**示例**
+
+以下示例说明了`ISpRecoContext::CreateGrammar`函数的使用：
+```c++
+// Declare local identifiers:
+HRESULT	                   hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+CComPtr<ISpRecoResult>     cpRecoResult;
+CComPtr<ISpRecoGrammar>    cpRecoGrammar;
+ULONGLONG                  ullGramId = 1;
+SPPHRASE                   *pPhrase;
+const WCHAR                *MY_CFG_FILENAME = L"Foo.cfg";    // Dummy file name.
+
+// Create a grammar object.
+hr = cpRecoContext->CreateGrammar(ullGramId, &cpRecoGrammar;);
+
+if (SUCCEEDED(hr))
+{
+   // Load a cfg from a file (constant points to dummy file name).
+   hr = cpRecoGrammar->LoadCmdFromFile(MY_CFG_FILENAME, SPLO_STATIC);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Activate the top-level rules.
+   hr = cpRecoGrammar->SetRuleState(NULL, NULL, SPRS_ACTIVE);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Get a recognition.
+   // ...
+}
+
+// Get the recognized phrase from the recognition result object.
+hr = cpRecoResult->GetPhrase(&pPhrase;);
+
+if (SUCCEEDED(hr))
+{
+   // Check the grammar id of the recognition result.
+   _ASSERT(GRAM_ID == pPhrase->ullGrammarID);
+
+   // Release system resources.
+   ::CoTaskMemFree(&pPhrase;);
+
+}
+```
+
 ## 7. ISpRecognizer接口的函数
 
 `ISpRecognizer`接口用于控制SR引擎的各个方面，一个识别器实例可以关联多个上下文(不过同一时间只能关联一个)。
