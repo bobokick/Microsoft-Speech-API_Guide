@@ -1459,321 +1459,333 @@ if (SUCCEEDED(hr))
 * 判断某词语是否有发音：
   使用`ISpRecoGrammar::IsPronounceable`函数来使SR引擎判断所给的词语是否有发音。
 
-**语法构建方法**
+### 8.1 语法构建方法
 
 对于语法设置器中的C&C语法的构建，常用的方法有两种：
 * 使用语法构建器接口`ISpGrammarBuilder`中的函数来构建
 * 编写XML格式的语法文本来构建
 
-**1. 使用语法构建器接口的构建方法**
+#### 8.11 使用语法构建器接口的构建方法
 
 语法构建器接口`ISpGrammarBuilder`是用于上下文无关语法的语法规则构建，根据语法规则的原理，我们有多种方法创建一个语法规则，以下介绍基于语法构建器接口进行语法规则创建的方法：
-* 单规则，无中间状态：
-  1. 使用`ISpGrammarBuilder::GetRule`函数来创建一个语法规则，可以设置该规则的名称、ID号和类型，并获取该规则开始状态的地址。
-  2. `ISpGrammarBuilder::AddWordTransition`函数是同一个规则的状态转换方法，我们需要设置短语来进行状态转换。
-  其中，我们需要输入转换前和转换后的状态地址(转换后的状态地址为`NULL`就代表终止状态)、表示短语的字符串、表示单词分隔符的字符串、单词类型、该转换方法的权重(因为转换方法有多个，当某次识别满足多个转换路径时，优先选择权重高的)和该转换方法的其他设置信息的地址。
-  所以我们要将转换后的状态地址要为`NULL`。
-  3. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
-  其中的参数必须设为`0`。
-  ```c++
-  // Declare local identifiers:
-  HRESULT                       hr = S_OK;
-  CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
-  SPSTATEHANDLE                 hStateTravel;
-  SPSTATEHANDLE                 hStateTravel_Second;
-  SPSTATEHANDLE                 hStateMethod;
-  SPSTATEHANDLE                 hStateDest;
 
-  // Create (if rule does not already exist)
-  // top-level Rule, defaulting to Active.
-  hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+##### 8.111 单规则，无中间状态：
 
-  // Approach 1: list all possible phrases--
-  // This is the most intuitive approach, and it does not sacrifice efficiency
-  // because the grammar builder will merge shared sub-phrases when possible.
-  // Internally, SAPI may break the transitions into separate transitions if
-  // there are common roots (e.g. "fly to Seattle" and "fly to New York").
-  // There is only one root state, hStateTravel, and the terminal NULL state,
-  // and there are 6 unique transitions between root state and NULL state.
+1. 使用`ISpGrammarBuilder::GetRule`函数来创建一个语法规则，可以设置该规则的名称、ID号和类型，并获取该规则开始状态的地址。
+2. `ISpGrammarBuilder::AddWordTransition`函数是同一个规则的状态转换方法，我们需要设置短语来进行状态转换。
+其中，我们需要输入转换前和转换后的状态地址(转换后的状态地址为`NULL`就代表终止状态)、表示短语的字符串、表示单词分隔符的字符串、单词类型、该转换方法的权重(因为转换方法有多个，当某次识别满足多个转换路径时，优先选择权重高的)和该转换方法的其他设置信息的地址。
+所以我们要将转换后的状态地址要为`NULL`。
+3. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
+其中的参数必须设为`0`。
 
-  /* XML Approximation:
-     <RULE NAME="Travel" TOPLEVEL="ACTIVE">
-        <PHRASE>fly to Seattle</PHRASE>
-        <PHRASE>fly to New York</PHRASE>
-        <PHRASE>fly to Washington DC</PHRASE>
-        <PHRASE>drive to Seattle</PHRASE>
-        <PHRASE>drive to New York</PHRASE>
-        <PHRASE>drive to Washington DC</PHRASE>
-     </RULE>
-  */
+```c++
+// Declare local identifiers:
+HRESULT                       hr = S_OK;
+CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
+SPSTATEHANDLE                 hStateTravel;
+SPSTATEHANDLE                 hStateTravel_Second;
+SPSTATEHANDLE                 hStateMethod;
+SPSTATEHANDLE                 hStateDest;
 
-  // Create set of peer phrases, each containing complete phrase.
-  // Note: the word delimiter is set as " ", so that the text we
-  // attach to the transition can be multiple words (for example,
-  // "fly to Seattle" is implicitly "fly" + "to" + "Seattle"):
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to Seattle", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to New York", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to Seattle", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to New York", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  // Must Commit before the grammar changes before using the grammar.
-  // NOTE: grammar changes are only given to the engine at synchronize
-  // points (see ISpSREngineSite::Synchronize).
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->Commit(0);
-  }
+// Create (if rule does not already exist)
+// top-level Rule, defaulting to Active.
+hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
 
-  if (SUCCEEDED(hr))
-  {
-     // Do some more stuff here.
-  }
-  ```
-* 单规则，有中间状态：
-  1. 和其他创建方法一样，使用`ISpGrammarBuilder::GetRule`函数创建一个语法规则。
-  2. 使用`ISpGrammarBuilder::CreateNewState`函数创建该规则的中间状态。
-  其中，我们需要输入规则的任意一个状态地址和保存新状态地址的指针。
-  3. 和其他创建方法一样，使用`ISpGrammarBuilder::AddWordTransition`函数设置同规则状态转换方法，转换后的状态地址要为`NULL`。
-  4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
-  其中的参数必须设为`0`。
-  ```c++
-  // Declare local identifiers:
-  HRESULT                       hr = S_OK;
-  CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
-  SPSTATEHANDLE                 hStateTravel;
-  SPSTATEHANDLE                 hStateTravel_Second;
-  SPSTATEHANDLE                 hStateMethod;
-  SPSTATEHANDLE                 hStateDest;
+// Approach 1: list all possible phrases--
+// This is the most intuitive approach, and it does not sacrifice efficiency
+// because the grammar builder will merge shared sub-phrases when possible.
+// Internally, SAPI may break the transitions into separate transitions if
+// there are common roots (e.g. "fly to Seattle" and "fly to New York").
+// There is only one root state, hStateTravel, and the terminal NULL state,
+// and there are 6 unique transitions between root state and NULL state.
 
-  // Create (if rule does not already exist)
-  // top-level Rule, defaulting to Active.
-  hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+/* XML Approximation:
+   <RULE NAME="Travel" TOPLEVEL="ACTIVE">
+      <PHRASE>fly to Seattle</PHRASE>
+      <PHRASE>fly to New York</PHRASE>
+      <PHRASE>fly to Washington DC</PHRASE>
+      <PHRASE>drive to Seattle</PHRASE>
+      <PHRASE>drive to New York</PHRASE>
+      <PHRASE>drive to Washington DC</PHRASE>
+   </RULE>
+*/
 
-  // Approach 2: construct the directed-graph using intermediate states--
-  // This approach gives you more control of the grammar layout, and may be
-  // easier to implement when you have some combinations.
-  // Using this approach, there is one root state (hStateTravel), one interim state
-  // (hStateTravel_Second), and the final terminal NULL state. There are three
-  // unique transitions between the root state and the interim state. And there are
-  // three more unique transitions between the interim state, and the final NULL state.
-  // Note that graph includes only 2-transition paths. The user is not capable of saying
-  // only the first transition or the second transition (e.g. "fly to" is an invalid
-  // phrase as is "Seattle", but "fly to Seattle" is valid.)
+// Create set of peer phrases, each containing complete phrase.
+// Note: the word delimiter is set as " ", so that the text we
+// attach to the transition can be multiple words (for example,
+// "fly to Seattle" is implicitly "fly" + "to" + "Seattle"):
+if (SUCCEEDED(hr))
+{
+   hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+   hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to New York", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+   hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"fly to Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+   hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+   hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to New York", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+   hr = cpGrammarBuilder->AddWordTransition(hStateTravel, NULL, L"drive to Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+}
+// Must Commit before the grammar changes before using the grammar.
+// NOTE: grammar changes are only given to the engine at synchronize
+// points (see ISpSREngineSite::Synchronize).
+if (SUCCEEDED(hr))
+{
+   hr = cpGrammarBuilder->Commit(0);
+}
 
-  /* XML Approximation:
-     <RULE NAME="Travel" TOPLEVEL="ACTIVE">
-        <LIST>
-           <PHRASE>fly to</PHRASE>
-           <PHRASE>drive to</PHRASE>
-           <PHRASE>take train to</PHRASE>
-        </LIST>
-        <LIST>
-           <PHRASE>Seattle</PHRASE>
-           <PHRASE>New York</PHRASE>
-           <PHRASE>Washington DC</PHRASE>
-        </LIST>
-     </RULE>
-  */
+if (SUCCEEDED(hr))
+{
+   // Do some more stuff here.
+}
+```
 
-  // Create a new transition which starts at
-  // the root state and ends at a second state.
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->CreateNewState(hStateTravel, &hStateTravel_Second);
-  }
+##### 8.112 单规则，有中间状态：
 
-  // Attach the first part of the phrase to to first transition:
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"fly to", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"drive to", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"take train to", L" ", SPWT_LEXICAL, 1, NULL);
-  }
+1. 和其他创建方法一样，使用`ISpGrammarBuilder::GetRule`函数创建一个语法规则。
+2. 使用`ISpGrammarBuilder::CreateNewState`函数创建该规则的中间状态。
+其中，我们需要输入规则的任意一个状态地址和保存新状态地址的指针。
+3. 和其他创建方法一样，使用`ISpGrammarBuilder::AddWordTransition`函数设置同规则状态转换方法，转换后的状态地址要为`NULL`。
+4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
+其中的参数必须设为`0`。
 
-  // Attach the second and final part of the phrase to
-  // the last transition (ending with the NULL state):
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"Seattle", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"New York", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  // Must Commit before the grammar changes before using the grammar.
-  // NOTE: grammar changes are only given to the engine at synchronize
-  // points (see ISpSREngineSite::Synchronize).
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->Commit(0);
-  }
+```c++
+// Declare local identifiers:
+HRESULT                       hr = S_OK;
+CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
+SPSTATEHANDLE                 hStateTravel;
+SPSTATEHANDLE                 hStateTravel_Second;
+SPSTATEHANDLE                 hStateMethod;
+SPSTATEHANDLE                 hStateDest;
 
-  if (SUCCEEDED(hr))
-  {
-     // Do some more stuff here.
-  }
-  ```
-* 多规则：
-  1. 使用`ISpGrammarBuilder::GetRule`函数创建多个语法规则。
-  2. `ISpGrammarBuilder::AddRuleTransition`函数是不同规则之间的状态转换方法。
-  其中，我们需要输入转换前和转换后的状态地址(转换前的状态必须为执行状态转换之前的语法规则中的状态，转换后的状态必须是另一个语法规则中的状态或者为`NULL`(表示终止状态))、转换后的状态地址所对应的语法规则中的任意一个状态地址、
-  该转换方法的权重(因为转换方法有多个，当某次识别满足多个转换路径时，优先选择权重高的)和该转换方法的其他设置信息的地址。
-  3. 使用`ISpGrammarBuilder::AddWordTransition`函数对所使用的每个规则都设置同规则转换方法，要将转换链中的最后一个规则的转换后的状态地址设为`NULL`。
-  4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
-  其中的参数必须设为`0`。
-  ```c++
-  // Declare local identifiers:
-  HRESULT                       hr = S_OK;
-  CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
-  SPSTATEHANDLE                 hStateTravel;
-  SPSTATEHANDLE                 hStateTravel_Second;
-  SPSTATEHANDLE                 hStateMethod;
-  SPSTATEHANDLE                 hStateDest;
+// Create (if rule does not already exist)
+// top-level Rule, defaulting to Active.
+hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
 
-  // Create (if rule does not already exist)
-  // top-level Rule, defaulting to Active.
-  hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+// Approach 2: construct the directed-graph using intermediate states--
+// This approach gives you more control of the grammar layout, and may be
+// easier to implement when you have some combinations.
+// Using this approach, there is one root state (hStateTravel), one interim state
+// (hStateTravel_Second), and the final terminal NULL state. There are three
+// unique transitions between the root state and the interim state. And there are
+// three more unique transitions between the interim state, and the final NULL state.
+// Note that graph includes only 2-transition paths. The user is not capable of saying
+// only the first transition or the second transition (e.g. "fly to" is an invalid
+// phrase as is "Seattle", but "fly to Seattle" is valid.)
 
-  // Approach 3: Using sub rules--
-  // This approach let you structure the grammars and is useful when building large grammars,
-  // since it allows for reusable component rules (see also the XML Grammar tag, RULEREF).
-  // Note that forward-declarations are allowed, since the grammar validation is not performed
-  // until the XML is compiled or the GrammarBuilder instance is 'Commit'ted.
-  // The main difference between Approach 2 and Approach 3 is the use of component rules, which
-  // are combined into one top-level rule. This facilitates the reuse of the component rules
-  // in other rules (e.g. create a second rule called "Geography" which combines the phrase
-  // "where is" with the "Dest" rule, allowing the user to say "where is New York", without
-  // requiring the grammar author/designer to place the same phrase text in multiple places
-  // of the grammar leading to grammar maintenance problems.
+/* XML Approximation:
+  <RULE NAME="Travel" TOPLEVEL="ACTIVE">
+     <LIST>
+        <PHRASE>fly to</PHRASE>
+        <PHRASE>drive to</PHRASE>
+        <PHRASE>take train to</PHRASE>
+     </LIST>
+     <LIST>
+        <PHRASE>Seattle</PHRASE>
+        <PHRASE>New York</PHRASE>
+        <PHRASE>Washington DC</PHRASE>
+     </LIST>
+  </RULE>
+*/
 
-  /* XML Approximation:
-     <RULE NAME="Travel" TOPLEVEL="ACTIVE">
-        <RULEREF NAME="Method"/>
-        <RULEREF NAME="Dest"/>
-     </RULE>
-     <RULE NAME="Method">
-        <LIST>
-           <PHRASE>fly to</PHRASE>
-           <PHRASE>drive to</PHRASE>
-           <PHRASE>take train to</PHRASE>
-        </LIST>
-     </RULE>
-     <RULE NAME="Dest" DYNAMIC="TRUE">
-        <LIST>
-           <PHRASE>Seattle</PHRASE>
-           <PHRASE>New York</PHRASE>
-           <PHRASE>Washington DC</PHRASE>
-        </LIST>
-     </RULE>
-  */
+// Create a new transition which starts at
+// the root state and ends at a second state.
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->CreateNewState(hStateTravel, &hStateTravel_Second);
+}
 
-  if (SUCCEEDED(hr))
-  {
-     // Note the two new rules ("Method" & "Dest") are NOT marked Top-level, since they are
-     // reused by other top-level rules, and are not by themselves recognizable phrases:
-     hr = cpGrammarBuilder->GetRule(L"Method", 0, 0, TRUE, &hStateMethod);
-  }
-  if (SUCCEEDED(hr))
-  {
-     // Marking the "Dest" rules as Dynamic allows the programmatic grammar author to
-     // update only the "Dest" rule after the initial ::Commit (e.g. to add more travel
-     // destinations depending on user history, preferences, or geographic data):
-     hr = cpGrammarBuilder->GetRule(L"Dest", 0, SPRAF_Dynamic, TRUE, &hStateDest);
-  }
+// Attach the first part of the phrase to to first transition:
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"fly to", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"drive to", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateTravel, hStateTravel_Second, L"take train to", L" ", SPWT_LEXICAL, 1, NULL);
+}
 
-  if (SUCCEEDED(hr))
-  {
-     // Create an interim state (same as Approach 2).
-     hr = cpGrammarBuilder->CreateNewState(hStateTravel, &hStateTravel_Second);
-  }
+// Attach the second and final part of the phrase to
+// the last transition (ending with the NULL state):
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"New York", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateTravel_Second, NULL, L"Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+}
+// Must Commit before the grammar changes before using the grammar.
+// NOTE: grammar changes are only given to the engine at synchronize
+// points (see ISpSREngineSite::Synchronize).
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->Commit(0);
+}
 
-  // Then attach rules to the transitions from Root->Interim and Interim->NULL state:
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddRuleTransition(hStateTravel, hStateTravel_Second, hStateMethod, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddRuleTransition(hStateTravel_Second, NULL, hStateDest, 1, NULL);
-  }
+if (SUCCEEDED(hr))
+{
+  // Do some more stuff here.
+}
+```
 
-  // Add the set of sibling transitions for travel "method":
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"fly to", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"drive to", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"take train to", L" ", SPWT_LEXICAL, 1, NULL);
-  }
+##### 8.113 多规则：
 
-  // Add the set of sibling transitions for travel "destinations":
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"Seattle", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"New York", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
-  }
-  // Must Commit before the grammar changes before using the grammar.
-  // NOTE: grammar changes are only given to the engine at synchronize
-  // points (see ISpSREngineSite::Synchronize).
-  if (SUCCEEDED(hr))
-  {
-     hr = cpGrammarBuilder->Commit(0);
-  }
+1. 使用`ISpGrammarBuilder::GetRule`函数创建多个语法规则。
+2. `ISpGrammarBuilder::AddRuleTransition`函数是不同规则之间的状态转换方法。
+其中，我们需要输入转换前和转换后的状态地址(转换前的状态必须为执行状态转换之前的语法规则中的状态，转换后的状态必须是另一个语法规则中的状态或者为`NULL`(表示终止状态))、转换后的状态地址所对应的语法规则中的任意一个状态地址、
+该转换方法的权重(因为转换方法有多个，当某次识别满足多个转换路径时，优先选择权重高的)和该转换方法的其他设置信息的地址。
+3. 使用`ISpGrammarBuilder::AddWordTransition`函数对所使用的每个规则都设置同规则转换方法，要将转换链中的最后一个规则的转换后的状态地址设为`NULL`。
+4. 使用`ISpGrammarBuilder::Commit`函数保存所设置的语法规则。
+其中的参数必须设为`0`。
 
-  if (SUCCEEDED(hr))
-  {
-     // Do some more stuff here.
-  }
-  ```
+```c++
+// Declare local identifiers:
+HRESULT                       hr = S_OK;
+CComPtr<ISpGrammarBuilder>    cpGrammarBuilder;
+SPSTATEHANDLE                 hStateTravel;
+SPSTATEHANDLE                 hStateTravel_Second;
+SPSTATEHANDLE                 hStateMethod;
+SPSTATEHANDLE                 hStateDest;
 
-**2. 编写XML语法文本的构建方法**
+// Create (if rule does not already exist)
+// top-level Rule, defaulting to Active.
+hr = cpGrammarBuilder->GetRule(L"Travel", 0, SPRAF_TopLevel | SPRAF_Active, TRUE, &hStateTravel);
+
+// Approach 3: Using sub rules--
+// This approach let you structure the grammars and is useful when building large grammars,
+// since it allows for reusable component rules (see also the XML Grammar tag, RULEREF).
+// Note that forward-declarations are allowed, since the grammar validation is not performed
+// until the XML is compiled or the GrammarBuilder instance is 'Commit'ted.
+// The main difference between Approach 2 and Approach 3 is the use of component rules, which
+// are combined into one top-level rule. This facilitates the reuse of the component rules
+// in other rules (e.g. create a second rule called "Geography" which combines the phrase
+// "where is" with the "Dest" rule, allowing the user to say "where is New York", without
+// requiring the grammar author/designer to place the same phrase text in multiple places
+// of the grammar leading to grammar maintenance problems.
+
+/* XML Approximation:
+  <RULE NAME="Travel" TOPLEVEL="ACTIVE">
+     <RULEREF NAME="Method"/>
+     <RULEREF NAME="Dest"/>
+  </RULE>
+  <RULE NAME="Method">
+     <LIST>
+        <PHRASE>fly to</PHRASE>
+        <PHRASE>drive to</PHRASE>
+        <PHRASE>take train to</PHRASE>
+     </LIST>
+  </RULE>
+  <RULE NAME="Dest" DYNAMIC="TRUE">
+     <LIST>
+        <PHRASE>Seattle</PHRASE>
+        <PHRASE>New York</PHRASE>
+        <PHRASE>Washington DC</PHRASE>
+     </LIST>
+  </RULE>
+*/
+
+if (SUCCEEDED(hr))
+{
+  // Note the two new rules ("Method" & "Dest") are NOT marked Top-level, since they are
+  // reused by other top-level rules, and are not by themselves recognizable phrases:
+  hr = cpGrammarBuilder->GetRule(L"Method", 0, 0, TRUE, &hStateMethod);
+}
+if (SUCCEEDED(hr))
+{
+  // Marking the "Dest" rules as Dynamic allows the programmatic grammar author to
+  // update only the "Dest" rule after the initial ::Commit (e.g. to add more travel
+  // destinations depending on user history, preferences, or geographic data):
+  hr = cpGrammarBuilder->GetRule(L"Dest", 0, SPRAF_Dynamic, TRUE, &hStateDest);
+}
+
+if (SUCCEEDED(hr))
+{
+  // Create an interim state (same as Approach 2).
+  hr = cpGrammarBuilder->CreateNewState(hStateTravel, &hStateTravel_Second);
+}
+
+// Then attach rules to the transitions from Root->Interim and Interim->NULL state:
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddRuleTransition(hStateTravel, hStateTravel_Second, hStateMethod, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddRuleTransition(hStateTravel_Second, NULL, hStateDest, 1, NULL);
+}
+
+// Add the set of sibling transitions for travel "method":
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"fly to", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"drive to", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateMethod, NULL, L"take train to", L" ", SPWT_LEXICAL, 1, NULL);
+}
+
+// Add the set of sibling transitions for travel "destinations":
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"Seattle", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"New York", L" ", SPWT_LEXICAL, 1, NULL);
+}
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->AddWordTransition(hStateDest, NULL, L"Washington DC", L" ", SPWT_LEXICAL, 1, NULL);
+}
+// Must Commit before the grammar changes before using the grammar.
+// NOTE: grammar changes are only given to the engine at synchronize
+// points (see ISpSREngineSite::Synchronize).
+if (SUCCEEDED(hr))
+{
+  hr = cpGrammarBuilder->Commit(0);
+}
+
+if (SUCCEEDED(hr))
+{
+  // Do some more stuff here.
+}
+```
+
+#### 8.12 编写XML语法文本的构建方法
 
 SAPI中，我们可以使用XML格式的文本来构建语法，XML(Extensible Markup Language)是一种语言格式，常用于程序的各种数据保存，当做配置文件来使用，通用的XML语法可参考[XML教程](https://www.runoob.com/xml/xml-tutorial.html)，接下来我所介绍的XML文本是SAPI能够识别，能够当成SAPI中语法的文本。
 
+##### 8.121 SAPI中的专有XML语法
+
 SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文本：
+
 * `DEFINE`标签
-  `DEFINE`标签用于包含一些XML文本所要用到的常量定义。
+  `DEFINE`标签用于包含后续XML语法文本所要用到的常量定义。
 
   `DEFINE`标签通常只含有：
   * `ID`标签元素，每个`ID`元素表示一个常量定义。
@@ -1784,6 +1796,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
       <ID NAME="PEACH_PRICE" VAL="15"/>
   </DEFINE>
   ```
+
 * `ID`标签
   `ID`标签用于定义XML文本所要用到的常量，这些常量可以用来表示XML文本后续标签中的属性值。`ID`标签常用于`DEFINE`标签内。
 
@@ -1793,25 +1806,27 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
   <DEFINE>
       <!-- 一个常量定义，定义了一个常量名为APPLE_PRICE, 值为10的常量-->
       <ID NAME="APPLE_PRICE" VAL="10"/>
-      <!-- 定义了一个常量名为PEACH_PRICE, 值为15的常量-->
-      <ID NAME="PEACH_PRICE" VAL="15"/>
+      <!-- 定义了一个常量名为RULE1_NAME, 值为rule1的常量-->
+      <ID NAME="RULE1_NAME" VAL="rule1"/>
   </DEFINE>
   <!-- 表示RULE标签中的ID属性的值为10，等价于
   <RULE ID="10"/>
   -->
   <RULE ID="APPLE_PRICE"/>
-  <!-- 表示RULE标签中的ID属性的值为15，等价于
-  <RULE ID="15"/>
+  <!-- 表示RULE标签中的NAME属性的值为rule1，等价于
+  <RULE NAME="rule1"/>
   -->
-  <RULE ID="PEACH_PRICE"/>
+  <RULE NAME="RULE1_NAME"/>
   ```
+
 * `RULE`标签
   一个`RULE`标签表示一个语法规则。
 
   `RULE`标签通常包含：
   * 一个`NAME`属性，表示该语法规则的名字。
   * 一个`ID`属性，表示该语法规则的编号。
-  * 可以有一个`TOPLEVEL`属性(表示是否为主要规则，主要规则就是指SR引擎从该规则开始识别的语法规则，属性值为`ACTIVE`(是)/`INACTIVE`(否))。
+  * 可以有一个`TOPLEVEL`属性（表示是否为主要规则，主要规则就是指SR引擎以该规则开始，进行语音识别的语法规则。一个XML语法文本中可以有多个主规则，SR引擎可以识别任意一个被这些规则所表示的语句。属性值为`ACTIVE`(是)/`INACTIVE`(否)。不写该属性就默认为非主要规则）。
+  * 可以有一个`DYNAMIC`属性（表示该规则的加载方式是否为动态加载，属性值为`TRUE`(是)/`FALSE`(否)。不写该属性就默认为非动态加载）。
   * 包含某些`PHRASE`/`P`、`LIST`/`L`、`OPT`/`O`和`RULEREF`标签，这些都为短语类标签，表示了该语法规则所能识别的语句。
   ```xml
   <!-- 主规则，名为rule1，编号为1-->
@@ -1829,12 +1844,13 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
       <P>真快乐</P>
   </RULE>
   ```
+
 * `PHRASE`/`P`标签
   短语类标签，一个`PHRASE`或者`P`标签表示语法规则中的一个短语。
 
   `PHRASE`或者`P`标签通常包含：
   * 一个文本内容，表示该标签对应的短语，该短语用于SR引擎的语音识别。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性，分别表示该短语所含有的一些信息(可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中)。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule2，含有三个短语，
   该语法规则只能识别语句：
@@ -1846,12 +1862,13 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
       <P>学习</P>
   </RULE>
   ```
+
 * `LIST`/`L`标签
   短语类标签，一个`LIST`或者`L`标签也表示语法规则中的一个短语，不过它自己不包含短语文本，只包含各种短语类标签，并用其所含的短语类标签中的任意一个短语来表示自己的短语。
 
   `LIST`或者`L`标签通常包含：
   * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语的任意一个都可以作为该标签所表示的短语。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性，分别表示该短语所含有的一些信息(可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中)。
+  * 可以有一个`PROPNAME`和`PROPID`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个LIST标签，
   该语法规则能识别以下语句：
@@ -1860,20 +1877,22 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
   3. 学习
   -->
   <RULE NAME="rule" TOPLEVEL="ACTIVE">
-      <L PROPNAME="lst1" PROPID="1" VAL="30">
+      <L PROPNAME="lst1" PROPID="1">
         <P>吃饭</P>
         <P>睡觉</P>
         <P>学习</P>
       </L>
   </RULE>
   ```
+
 * `OPT`/`O`标签
   短语类标签，用于包含零个或多个短语。
   一个`OPT`或者`O`标签可以有自己的短语文本，还可以包含各种短语类标签，对于规则来说，其包含的所有短语都是可选的，也就是语音中有没有这些短语都能被识别。
 
   `OPT`或者`O`标签通常包含：
+  * 一个文本内容，表示该标签所包含的一个短语，该短语在规则中为可选。
   * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语在规则中都为可选。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性，分别表示该短语所含有的一些信息(可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中)。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个OPT和LIST标签，
   该语法规则能识别以下语句：
@@ -1886,18 +1905,20 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
           今天
          <P>我要<P>
       </O>
-      <L PROPNAME="lst1" PROPID="2" VAL="30">
+      <L PROPNAME="lst1" PROPID="2">
         <P>吃饭</P>
         <P>睡觉</P>
         <P>学习</P>
       </L>
   </RULE>
   ```
+
 * `RULEREF`标签
   短语类标签，表示该短语引用自另一个语法规则。
 
   `RULEREF`标签通常包含：
-  * 一个`NAME`/`REFNAME`和`ID`/`REFID`属性，分别表示该短语所引用的规则的名称和编号。
+  * 一个`NAME`或`REFID`属性，分别表示该短语所引用的规则的名称和编号（必须要和所引用的规则匹配）。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个LIST和RULEREF标签，
   该语法规则能识别以下语句：
@@ -1907,7 +1928,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
   -->
   <RULE NAME="rule" TOPLEVEL="ACTIVE">
       <RULEREF NAME="rule2"/>
-      <L PROPNAME="lst1" PROPID="1" VAL="30">
+      <L PROPNAME="lst1" PROPID="1">
         <P>吃饭</P>
         <P>睡觉</P>
         <P>学习</P>
@@ -1919,11 +1940,12 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
       <P>我要</P>
   </RULE>
   ```
+
 * `GRAMMAR`标签
-  `GRAMMAR`标签可以看做为XML语法文本中的根元素。
+  `GRAMMAR`标签可以看做为XML语法文本中的根元素，表示该语法文本中的语法，其他标签都必须要被该标签包含在内。
 
   `GRAMMAR`标签通常包含：
-  * 一个`LANGID`属性，用于表示该语法文本所识别的语音类型(表示识别中文或英文等，中文的属性值为`804`，英文为`409`)。
+  * 一个`LANGID`属性，用于表示该语法文本所识别的语音类型（表示识别中文或英文等，中文的属性值为`804`，英文为`409`）。
   * 零个或多个`DEFINE`和`RULE`标签。
   ```xml
   <!-- 该GRAMMAR标签含有1个DEFINE元素，2个RULE元素
@@ -1939,7 +1961,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
     </DEFINE>
     <RULE ID="APPLE_PRICE" TOPLEVEL="ACTIVE">
       <RULEREF REFID="PEACH_PRICE"/>
-      <L PROPNAME="lst1" PROPID="1" VAL="30">
+      <L PROPNAME="lst1" PROPID="1">
         <P>吃饭</P>
         <P>睡觉</P>
         <P>学习</P>
@@ -1951,10 +1973,12 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
     </RULE>
   </GRAMMAR>
   ```
+
 * `DICTATION`标签
 * `RESOURCE`标签
 * `TEXTBUFFER`标签
 * `WILDCARD`标签
+
 * 特殊符号
   以下这些特殊符号只能用于表示短语文本的位置或者短语文本中。
   * 符号`?`
@@ -1968,3 +1992,55 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
   * 符号`-`
     用于一个短语文本前，表示减少该短语的识别优先级(置信度)。
 
+##### 8.122 XML语法文本示例
+
+```xml
+<!-- XML声明，表示该文本以utf8编码保存-->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XML语法，该语法含有1个DEFINE元素，3个RULE元素
+  该语法可以识别以下中文语句，XXX代表任意长度的短语：
+  (今天/明天/后天)(我/你/他)(要)吃饭/睡觉/学习 XXX 
+-->
+<GRAMMAR LANGID="804">
+    <!-- 常量定义，定义了三个规则的ID号-->
+    <DEFINE>
+        <ID NAME="cst_main" VAL="10"/>
+        <ID NAME="day_time" VAL="15"/>
+        <ID NAME="person" VAL="20"/>
+    </DEFINE>
+    <!-- 主规则-->
+    <RULE ID="cst_main" TOPLEVEL="ACTIVE">
+        <RULEREF REFID="day_time" PROPNAME="m_rp1" PROPID="1" VAL="10"/>
+        <RULEREF REFID="person" PROPNAME="m_rp2" PROPID="2" VAL="11"/>
+        <L PROPNAME="lst1" PROPID="1">
+            <P PROPNAME="m_p1" PROPID="11" VAL="20">吃饭</P>
+            <P PROPNAME="m_p2" PROPID="12" VAL="30">睡觉</P>
+            <P PROPNAME="m_p2" PROPID="13" VAL="40">学习</P>
+        </L>
+        <RULEREF NAME="end" PROPNAME="m_rp3" PROPID="4" VAL="12"/>
+    </RULE>
+    <!-- 普通规则-->
+    <RULE ID="day_time">
+        <O PROPNAME="dt_g1" PROPID="1" VAL="50">
+            今天
+            <P>明天</P>
+            <P>后天</P>
+        </O>
+    </RULE>
+    <!-- 普通规则-->
+    <RULE ID="person">
+        <O PROPNAME="dt_g2" PROPID="2" VAL="60">
+            <L PROPNAME="lst2" PROPID="2">
+                <P>我</P>
+                <P>你</P>
+                <P>他</P>
+            </L>
+            要
+        </O>
+    </RULE>
+    <!-- 普通规则-->
+    <RULE NAME="end">
+        <P>...</P>
+    </RULE>
+</GRAMMAR>
+```

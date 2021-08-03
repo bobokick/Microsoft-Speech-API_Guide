@@ -1,0 +1,48 @@
+<!-- XML声明，表示该文本以utf8编码保存-->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XML语法，该语法含有1个DEFINE元素，3个RULE元素
+  该语法可以识别以下中文语句，XXX代表任意长度的短语：
+  (今天/明天/后天)(我/你/他)(要)吃饭/睡觉/学习 XXX 
+-->
+<GRAMMAR LANGID="804">
+    <!-- 常量定义，定义了三个规则的ID号-->
+    <DEFINE>
+        <ID NAME="cst_main" VAL="10"/>
+        <ID NAME="day_time" VAL="15"/>
+        <ID NAME="person" VAL="20"/>
+    </DEFINE>
+    <!-- 主规则-->
+    <RULE ID="cst_main" TOPLEVEL="ACTIVE">
+        <RULEREF REFID="day_time" PROPNAME="m_rp1" PROPID="1" VAL="10"/>
+        <RULEREF REFID="person" PROPNAME="m_rp2" PROPID="2" VAL="11"/>
+        <L PROPNAME="lst1" PROPID="1">
+            <P PROPNAME="m_p1" PROPID="11" VAL="20">吃饭</P>
+            <P PROPNAME="m_p2" PROPID="12" VAL="30">睡觉</P>
+            <P PROPNAME="m_p2" PROPID="13" VAL="40">学习</P>
+        </L>
+        <RULEREF NAME="end" PROPNAME="m_rp3" PROPID="4" VAL="12"/>
+    </RULE>
+    <!-- 普通规则-->
+    <RULE ID="day_time">
+        <O PROPNAME="dt_g1" PROPID="1" VAL="50">
+            今天
+            <P>明天</P>
+            <P>后天</P>
+        </O>
+    </RULE>
+    <!-- 普通规则-->
+    <RULE ID="person">
+        <O PROPNAME="dt_g2" PROPID="2" VAL="60">
+            <L PROPNAME="lst2" PROPID="2">
+                <P>我</P>
+                <P>你</P>
+                <P>他</P>
+            </L>
+            要
+        </O>
+    </RULE>
+    <!-- 普通规则-->
+    <RULE NAME="end">
+        <P>...</P>
+    </RULE>
+</GRAMMAR>
