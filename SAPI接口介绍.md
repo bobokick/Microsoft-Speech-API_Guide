@@ -1228,13 +1228,19 @@ typedef struct SPEVENT
 
 上下文有类型的区别，且其类型和识别器的一样。这表示上下文能够关联的识别器类型，不同类型的上下文和识别器之间不能关联。
 
+**实例创建方法**
+
 上下文实例有两种创建方法：
-* 普通方法，用`CoCreateInstance`函数(可以是智能指针里的)来创建上下文实例(组件号`CLSID_SpSharedRecoContext`来创建共享型上下文实例，`CLSID_SpInprocRecoContext`来创建进程内上下文实例)。
+* 普通方法，用`CoCreateInstance`函数(可以是智能指针里的)来创建上下文实例(该方法只能创建共享型上下文实例，不能创建进程内上下文实例，用组件号`CLSID_SpSharedRecoContext`来创建共享型上下文实例)。
   此方法会自动创建与该实例类型相同的识别器实例，并关联在一起，我们可以用`ISpRecoContext::GetRecognizer`函数来获取与此关联的识别器实例。
 * 通过识别器实例的`ISpRecognizer::CreateRecoContext`函数来创建对应的上下文实例。
   此方法创建的上下文实例会自动与该识别器关联。
 
+**实例关联方法**
+
 上下文实例关联语法设置器实例的操作只有一种，也就是使用`ISpRecoContext::CreateGrammar`函数来创建一个语法设置器实例并自动关联(我们不能自己创建语法设置器实例来关联)。
+
+**接口常用函数简介**
 
 上下文实例可以设置所用的语法设置器里C&C或专用语法中的，由SR引擎返回的最大替代词数量(用`ISpRecoContext::SetMaxAlternates`函数)，设置语音识别后是否在[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))中保留该音频(用`ISpRecoContext::SetAudioOptions`函数)，在识别流中插入书签设置(用`ISpRecoContext::Bookmark`函数)，在[序列化结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125140(v=vs.85))中获取[识别结果](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413313(v=vs.85))(用`ISpRecoContext::DeserializeResult`函数)，设置SR引擎的适应数据用于提高短语句子的识别率(用`ISpRecoContext::SetAdaptationData`函数)，设置上下文实例相关联的`ISpVoice`对象用于语音交互识别(用`ISpRecoContext::SetVoice`函数)，设置语音交互识别中终止并清除朗读请求的SR事件(用`ISpRecoContext::SetVoicePurgeEvent`函数)，设置上下文识别状态用于切换不同的语法(不是语法设置器实例)(用`ISpRecoContext::SetContextState`函数)，等各种操作。
 有关设置方面的操作都有默认设置。
@@ -1382,30 +1388,40 @@ if (SUCCEEDED(hr))
   进程内识别器是创建该识别器的程序才能使用的识别器类型，该识别器使用进程内SR引擎。
   进程内SR引擎被创建在该进程中，其他程序不能使用该SR引擎。
 
+**实例创建方法**
+
 对于识别器实例的创建方法，和上下文一样，有两种：
 * 普通方法，用`CoCreateInstance`函数(可以是智能指针里的)来创建识别器实例(组件号`CLSID_SpSharedRecognizer`来创建共享型识别器实例，`CLSID_SpInprocRecognizer`来创建进程内识别器实例)。
-* 通过创建上下文实例就能自动创建与该上下文实例类型相同的识别器实例。
+* 通过直接创建上下文实例就能自动创建与该上下文实例类型相同的识别器实例(该方法只能创建共享型识别器实例，不能创建进程内识别器实例，因为直接创建上下文实例的方法不能创建共享型上下文实例)。
   我们可以用`ISpRecoContext::GetRecognizer`函数来获取该识别器实例。
+
+**实例关联方法**
 
 识别器实例关联上下文实例的操作有两种：
 * 如果识别器实例是用普通方法创建的，我们只能使用`ISpRecognizer::CreateRecoContext`函数来创建一个上下文实例并自动关联(此时我们不能自己创建上下文实例来关联)。
 * 如果识别器实例是由上下文实例创建，则无需操作就已经关联上。
 
+**接口常用函数简介**
+
 识别器实例可以指定特定的同类型的SR引擎(用`ISpRecognizer::SetRecognizer`函数)、设置SR引擎的输入流(用`ISpRecognizer::SetInput`函数)和配置文件(用`ISpRecognizer::SetRecoProfile`函数)等操作。
 有关设置方面的操作都有默认设置。当进行这些设置操作时，需要当前SR引擎处于非使用状态(不在处理音频)才能进行。
 
-## 8. ISpRecoGrammar接口常用函数
+## 8. ISpRecoGrammar接口的函数
 
 语法设置器接口`ISpRecoGrammar`继承了接口`ISpGrammarBuilder`，接口`ISpGrammarBuilder`用于上下文无关语法的语法规则构建与修改。
 所以语法设置器接口`ISpRecoGrammar`用于设置SR引擎可以识别的单词和词组(可用XML文本来设置，[这里是使用XML文本来构建语法的教程](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee125672(v=vs.85)))。
 
 一个语法设置器实例也可以关联多个上下文(不过同一时间只能关联一个)，由此可以设置多个不同的语法设置器来满足程序的不同场景需求。
 
+**语法分类**
+
 所有的语法设置器实例可以同时支持两种不同的语法模式：
 * 命令与控制式语法(C&C)，作为上下文无关语法(CFGs)实现
 * 听说式语法(dictation)
 
 当实例使用其中一种语法设置失败时，可以自动切换到另一种语法继续设置。不过语法设置器主要还是依赖C&C语法来进行操作的。
+
+**语法介绍**
 
 语法是语音识别中不可缺少的一部分，语法就是能被识别的一种语音规则。
 其中，C&C语法是由一个或多个语法规则组成的一种结构。其中语法规则是由零个或多个短语、单词以及其他语法规则组成的，语法规则用来限制该规则所能使用的短语或单词。SR引擎通过使用语法规则来识别音频流中的内容。
@@ -1414,8 +1430,9 @@ if (SUCCEEDED(hr))
 一个语法规则可以看做一种状态机，它含有开始和终止状态，在这些状态中还可以有中间状态。规则的状态可以由设置的短语来转换，SAPI还支持从一个规则的状态转换到另一个规则的状态，这些状态转换方法可以有多个。
 从规则的开始状态转换到规则的终止状态(可以不是同一个规则)就是一次完整的成功的识别，该次转换中所经过的短语组合就是SR引擎所识别的内容。
 
-语法设置器中，我们可以自己创建语法或者直接加载已有的语法。一个语法设置器实例中最多只能含有一个C&C语法和听写式语法。
+**接口常用函数简介**
 
+语法设置器中，我们可以自己创建语法或者直接加载已有的语法。一个语法设置器实例中最多只能含有一个C&C语法和听写式语法。
 以下是语法相关的方法：
 * 对于C&C语法来说：
   * 创建语法规则：使用`ISpGrammarBuilder`接口所拥有的函数
@@ -1441,6 +1458,14 @@ if (SUCCEEDED(hr))
   比如可以选择程序文本框中的某些文字，还可以对其进行信息插入操作。
 * 判断某词语是否有发音：
   使用`ISpRecoGrammar::IsPronounceable`函数来使SR引擎判断所给的词语是否有发音。
+
+**语法构建方法**
+
+对于语法设置器中的C&C语法的构建，常用的方法有两种：
+* 使用语法构建器接口`ISpGrammarBuilder`中的函数来构建
+* 编写XML格式的语法文本来构建
+
+**1. 使用语法构建器接口的构建方法**
 
 语法构建器接口`ISpGrammarBuilder`是用于上下文无关语法的语法规则构建，根据语法规则的原理，我们有多种方法创建一个语法规则，以下介绍基于语法构建器接口进行语法规则创建的方法：
 * 单规则，无中间状态：
@@ -1741,4 +1766,205 @@ if (SUCCEEDED(hr))
      // Do some more stuff here.
   }
   ```
+
+**2. 编写XML语法文本的构建方法**
+
+SAPI中，我们可以使用XML格式的文本来构建语法，XML(Extensible Markup Language)是一种语言格式，常用于程序的各种数据保存，当做配置文件来使用，通用的XML语法可参考[XML教程](https://www.runoob.com/xml/xml-tutorial.html)，接下来我所介绍的XML文本是SAPI能够识别，能够当成SAPI中语法的文本。
+
+SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文本：
+* `DEFINE`标签
+  `DEFINE`标签用于包含一些XML文本所要用到的常量定义。
+
+  `DEFINE`标签通常只含有：
+  * `ID`标签元素，每个`ID`元素表示一个常量定义。
+  ```xml
+  <!-- DEFINE标签内含有2个常量定义-->
+  <DEFINE>
+      <ID NAME="APPLE_PRICE" VAL="10"/>
+      <ID NAME="PEACH_PRICE" VAL="15"/>
+  </DEFINE>
+  ```
+* `ID`标签
+  `ID`标签用于定义XML文本所要用到的常量，这些常量可以用来表示XML文本后续标签中的属性值。`ID`标签常用于`DEFINE`标签内。
+
+  `ID`标签通常只含有：
+  * 属性名`NAME`和`VAL`，分别表示该常量名和常量值。
+  ```xml
+  <DEFINE>
+      <!-- 一个常量定义，定义了一个常量名为APPLE_PRICE, 值为10的常量-->
+      <ID NAME="APPLE_PRICE" VAL="10"/>
+      <!-- 定义了一个常量名为PEACH_PRICE, 值为15的常量-->
+      <ID NAME="PEACH_PRICE" VAL="15"/>
+  </DEFINE>
+  <!-- 表示RULE标签中的ID属性的值为10，等价于
+  <RULE ID="10"/>
+  -->
+  <RULE ID="APPLE_PRICE"/>
+  <!-- 表示RULE标签中的ID属性的值为15，等价于
+  <RULE ID="15"/>
+  -->
+  <RULE ID="PEACH_PRICE"/>
+  ```
+* `RULE`标签
+  一个`RULE`标签表示一个语法规则。
+
+  `RULE`标签通常包含：
+  * 一个`NAME`属性，表示该语法规则的名字。
+  * 一个`ID`属性，表示该语法规则的编号。
+  * 可以有一个`TOPLEVEL`属性(表示是否为主要规则，主要规则就是指SR引擎从该规则开始识别的语法规则，属性值为`ACTIVE`(是)/`INACTIVE`(否))。
+  * 包含某些`PHRASE`/`P`、`LIST`/`L`、`OPT`/`O`和`RULEREF`标签，这些都为短语类标签，表示了该语法规则所能识别的语句。
+  ```xml
+  <!-- 主规则，名为rule1，编号为1-->
+  <RULE NAME="rule1" ID="1" TOPLEVEL="ACTIVE">
+      <O>每天</O>
+      <L>
+        <P>吃饭</P>
+        <P>睡觉</P>
+        <P>学习</P>
+      </L>
+      <RULEREF NAME="rule2"/>
+  </RULE>
+  <!-- 普通规则，名为rule2-->
+  <RULE NAME="rule2">
+      <L>真快乐</L>
+  </RULE>
+  ```
+* `PHRASE`/`P`标签
+  短语类标签，一个`PHRASE`或者`P`标签表示语法规则中的一个短语。
+
+  `PHRASE`或者`P`标签通常包含：
+  * 一个文本内容，表示该标签对应的短语，该短语用于SR引擎的语音识别。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性，分别表示该短语所含有的一些信息(可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中)。
+  ```xml
+  <!-- 主规则rule2，含有三个短语，
+  该语法规则只能识别语句：
+  "今天我要学习"
+  -->
+  <RULE NAME="rule2" TOPLEVEL="ACTIVE">
+      <P PROPNAME="ph1" PROPID="1" VAL="30">今天</P>
+      <P PROPID="2">我要</P>
+      <P>学习</P>
+  </RULE>
+  ```
+* `LIST`/`L`标签
+  短语类标签，一个`LIST`或者`L`标签也表示语法规则中的一个短语，不过它自己不包含短语文本，只包含各种短语类标签，并用其所含的短语类标签中的任意一个短语来表示自己的短语。
+
+  `LIST`或者`L`标签通常包含：
+  * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语的任意一个都可以作为该标签所表示的短语。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性，分别表示该短语所含有的一些信息(可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中)。
+  ```xml
+  <!-- 主规则rule，含有一个LIST标签，
+  该语法规则能识别以下语句：
+  1. 吃饭
+  2. 睡觉
+  3. 学习
+  -->
+  <RULE NAME="rule" TOPLEVEL="ACTIVE">
+      <L PROPNAME="lst1" PROPID="1" VAL="30">
+        <P>吃饭</P>
+        <P>睡觉</P>
+        <P>学习</P>
+      </L>
+  </RULE>
+  ```
+* `OPT`/`O`标签
+  短语类标签，用于包含零个或多个短语。
+  一个`OPT`或者`O`标签可以有自己的短语文本，还可以包含各种短语类标签，对于规则来说，其包含的所有短语都是可选的，也就是语音中有没有这些短语都能被识别。
+
+  `OPT`或者`O`标签通常包含：
+  * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语在规则中都为可选。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性，分别表示该短语所含有的一些信息(可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中)。
+  ```xml
+  <!-- 主规则rule，含有一个OPT和LIST标签，
+  该语法规则能识别以下语句：
+  1. (今天我要)吃饭
+  2. (今天我要)睡觉
+  3. (今天我要)学习
+  -->
+  <RULE NAME="rule" TOPLEVEL="ACTIVE">
+      <O PROPNAME="opt1" PROPID="1" VAL="10">
+          今天
+         <P>我要<P>
+      </O>
+      <L PROPNAME="lst1" PROPID="2" VAL="30">
+        <P>吃饭</P>
+        <P>睡觉</P>
+        <P>学习</P>
+      </L>
+  </RULE>
+  ```
+* `RULEREF`标签
+  短语类标签，表示该短语引用自另一个语法规则。
+
+  `RULEREF`标签通常包含：
+  * 一个`NAME`/`REFNAME`和`ID`/`REFID`属性，分别表示该短语所引用的规则的名称和编号。
+  ```xml
+  <!-- 主规则rule，含有一个LIST和RULEREF标签，
+  该语法规则能识别以下语句：
+  1. 今天我要吃饭
+  2. 今天我要睡觉
+  3. 今天我要学习
+  -->
+  <RULE NAME="rule" TOPLEVEL="ACTIVE">
+      <RULEREF NAME="rule2"/>
+      <L PROPNAME="lst1" PROPID="1" VAL="30">
+        <P>吃饭</P>
+        <P>睡觉</P>
+        <P>学习</P>
+      </L>
+  </RULE>
+  <!-- 普通规则rule2-->
+  <RULE NAME="rule2">
+      <P>今天</P>
+      <P>我要</P>
+  </RULE>
+  ```
+* `GRAMMAR`标签
+  `GRAMMAR`标签可以看做为XML语法文本中的根元素。
+
+  `GRAMMAR`标签通常包含：
+  * 一个`LANGID`属性，用于表示该语法文本所识别的语音类型(表示识别中文或英文等，中文的属性值为`804`，英文为`409`)。
+  * 零个或多个`DEFINE`和`RULE`标签。
+  ```xml
+  <!-- 该GRAMMAR标签含有1个DEFINE元素，2个RULE元素
+  该GRAMMAR标签所表示的语法可以识别以下中文语句：
+  1. 今天我要吃饭
+  2. 今天我要睡觉
+  3. 今天我要学习
+  -->
+  <GRAMMAR LANGID="804">
+    <DEFINE>
+        <ID NAME="APPLE_PRICE" VAL="10"/>
+        <ID NAME="PEACH_PRICE" VAL="15"/>
+    </DEFINE>
+    <RULE ID="APPLE_PRICE" TOPLEVEL="ACTIVE">
+      <RULEREF REFID="PEACH_PRICE"/>
+      <L PROPNAME="lst1" PROPID="1" VAL="30">
+        <P>吃饭</P>
+        <P>睡觉</P>
+        <P>学习</P>
+      </L>
+    </RULE>
+    <RULE ID="PEACH_PRICE">
+      <P>今天</P>
+      <P>我要</P>
+    </RULE>
+  </GRAMMAR>
+  ```
+* `DICTATION`标签
+* `RESOURCE`标签
+* `TEXTBUFFER`标签
+* `WILDCARD`标签
+* 特殊符号
+  以下这些特殊符号只能用于表示短语文本的位置或者短语文本中。
+  * 符号`?`
+    用于某单词前，表示该单词为可选。
+  * 符号`...`
+    表示识别时，该符号的位置可以匹配各种短语。
+  * 符号`*`
+    表示识别时，该符号位置所表示的单词使用听说式语法来识别。
+  * 符号`+`
+    用于一个短语文本前，表示增加该短语的识别优先级(置信度)。
+  * 符号`-`
+    用于一个短语文本前，表示减少该短语的识别优先级(置信度)。
 
