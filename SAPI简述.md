@@ -14,7 +14,7 @@ sapi语音引擎最后一个版本为5.4版本，微软虽然不再提供下载�
 sapi是微软提供的语音模块，它是基于COM标准的模块，也就是COM组件，COM组件就是符合微软推行的COM标准的支持多个接口的组件。
 符合COM的模块继承了IUnknown接口中的几种虚函数，比如查询函数和引用计数函数。所以在使用这些模块的时候需要遵循COM组件的操作流程，比如要自己计数等。
 不过COM模块都可以使用于一个管理COM接口智能指针类`CComPtr`，它在头文件`sphelper.h`中。
-通过使用智能来使用接口，就可以避免自己手动来计数等操作，有关智能指针类`CComPtr`的用法，可以参考[微软CComPtr教程](https://docs.microsoft.com/zh-cn/cpp/atl/reference/ccomptr-class?view=msvc-160)。
+通过使用智能来使用接口，就可以避免自己手动来计数等操作，有关智能指针类`CComPtr`的用法，可以参考[微软`CComPtr`教程](https://docs.microsoft.com/zh-cn/cpp/atl/reference/ccomptr-class?view=msvc-160)。
 
 sapi接口是在应用层面与语音引擎层面的桥梁，因为它实现了控制与管理不同语音引擎操作等底层细节的功能，从而方便我们操作和管理语音引擎。
 
