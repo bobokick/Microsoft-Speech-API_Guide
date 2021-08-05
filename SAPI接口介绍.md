@@ -215,7 +215,7 @@ HRESULT SetVoice(ISpObjectToken *pToken);
 **参数**
 
 * `pToken`
-  [in] 该指针指向所需要设置的语音对应的令牌，这些令牌为`ISpObjectToken`接口对象，具体详见[ISpObjectToken接口介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450856(v=vs.85))。
+  [in] 该指针指向所需要设置的语音对应的令牌，这些令牌为`ISpObjectToken`接口对象，具体详见[`ISpObjectToken`接口介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450856(v=vs.85))。
   如果`pToken`为`NULL`，则将使用默认语音。
 
 **返回值**
@@ -1083,7 +1083,7 @@ typedef enum SPEVENTENUM
   `wParam`参数被设置为当前词语的字符长度；`lParam`参数被设置为当前词语在所在输入流文本中的位置。
 * `SPEI_PHONEME`
   音素合成事件，每次音素合成都会触发该事件。
-  `wParam`参数的高位字节被设置为当前音素发音的持续时间(毫秒)，低位字节被设置为下一个音素的ID号；`lParam`参数的高位字节被设置为当前音素的特征类型(特征类型由[枚举类型SPVFEATURE](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431872(v=vs.85))定义，比如如果该音素不为主重音或强调，则特征类型的值为0)，低位字节被设置为当前音素的ID号。
+  `wParam`参数的高位字节被设置为当前音素发音的持续时间(毫秒)，低位字节被设置为下一个音素的ID号；`lParam`参数的高位字节被设置为当前音素的特征类型(特征类型由[枚举类型`SPVFEATURE`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431872(v=vs.85))定义，比如如果该音素不为主重音或强调，则特征类型的值为0)，低位字节被设置为当前音素的ID号。
   当TTS引擎要合成一个由多个音素组成的音素时，每个音素成员都会触发一次该事件。比如：
   当日语TTS引擎要合成音素kya(拗音)时，kya由音素ki和ya组成(清音)，所以就会触发两个该事件。并且因为音素ki的作用用于修改后面音素的声音，而不是自己发出声音，所以音素ki的发音的持续时间为0。
 * `SPEI_SENTENCE_BOUNDARY`
@@ -1091,7 +1091,7 @@ typedef enum SPEVENTENUM
   `wParam`参数被设置为当前语句的字符长度；`lParam`参数被设置为当前语句在所在输入流文本中的位置。
 * `SPEI_VISEME`
   视位(即音素到嘴形的映射字典)事件，每次视位变化都会触发该事件。
-  `wParam`参数的高位字节被设置为当前视位的持续时间(毫秒)，低位字节被设置为下一个视位的[SPVISEMES类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431873(v=vs.85))；`lParam`参数的高位字节被设置为当前视位的特征类型(特征类型由[枚举类型SPVFEATURE](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431872(v=vs.85))定义，比如如果该视位不为主重音或强调，则特征类型的值为0)，低位字节被设置为当前视位的[SPVISEMES类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431873(v=vs.85))。
+  `wParam`参数的高位字节被设置为当前视位的持续时间(毫秒)，低位字节被设置为下一个视位的[`SPVISEMES`类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431873(v=vs.85))；`lParam`参数的高位字节被设置为当前视位的特征类型(特征类型由[枚举类型`SPVFEATURE`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431872(v=vs.85))定义，比如如果该视位不为主重音或强调，则特征类型的值为0)，低位字节被设置为当前视位的[`SPVISEMES`类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431873(v=vs.85))。
 * `SPEI_TTS_AUDIO_LEVEL`
   表示实例当前音量等级。
   `wParam`参数被设置为当前音量等级[`0`, `100`]；`lParam`参数被设置为`0`。
@@ -1131,7 +1131,7 @@ typedef enum SPEVENTENUM
   `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含一些识别信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
 * `SPEI_INTERFERENCE`
   表示SR引擎判断当前声音有干扰，该干扰妨碍了声音的成功识别。
-  `lParam`参数被设置为[SPINTERFERENCE类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431851(v=vs.85))对象，该对象包含该干扰信息(可用辅助函数`CSpEvent::Interference`来取得)。
+  `lParam`参数被设置为[`SPINTERFERENCE`类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431851(v=vs.85))对象，该对象包含该干扰信息(可用辅助函数`CSpEvent::Interference`来取得)。
 * `SPEI_REQUEST_UI`
   表示SR引擎请求显示一个具体的用户界面(UI)。
   `lParam`参数被设置为一个以空字符结尾的字符串(可用辅助函数`CSpEvent::RequestTypeOfUI`来取得)。
@@ -1162,9 +1162,9 @@ typedef enum SPEVENTENUM
 * `SPEI_MAX_SR`
   SR事件的最大枚举值。
 * `SPEI_RESERVED1`
-  保留给SAPI内部使用。详见[SPFEI介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450731(v=vs.85))。
+  保留给SAPI内部使用。详见[`SPFEI`介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450731(v=vs.85))。
 * `SPEI_RESERVED2`
-  保留给SAPI内部使用。详见[SPFEI介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450731(v=vs.85))。
+  保留给SAPI内部使用。详见[`SPFEI`介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450731(v=vs.85))。
 * `SPEI_RESERVED3`
   保留给未来使用。
 
@@ -1195,7 +1195,7 @@ typedef struct SPEVENT
   表示事件类型ID(由枚举类型`SPEVENTENUM`表示的)。
 * `elParamType`
   表示在`lParam`参数中的相关数据签名。
-  我们需要在使用完事件后释放该相关数据，详见[SPEVENTLPARAMTYPE类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431846(v=vs.85))。
+  我们需要在使用完事件后释放该相关数据，详见[`SPEVENTLPARAMTYPE`类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431846(v=vs.85))。
 * `ulStreamNum`
   表示与事件相关的流编号。
   对于TTS来说，每次朗读请求后流编号会增加(用 `ISpVoice::SpeakStream`和`ISpVoice::Speak`函数)。
@@ -1219,7 +1219,7 @@ typedef struct SPEVENT
 
 该类的函数都是将一些接口的原生函数组合在一起操作的函数，作用和不用该函数的原生操作一样，只不过方便了许多。
 
-该类的具体函数及其使用详见[CSpEvent介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431916(v=vs.85))。
+该类的具体函数及其使用详见[`CSpEvent`介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431916(v=vs.85))。
 
 ## 6. ISpRecoContext接口的函数
 
@@ -1376,6 +1376,207 @@ if (SUCCEEDED(hr))
 }
 ```
 
+### 6.3 GetStatus函数
+
+**介绍**
+
+`ISpRecoContext::GetStatus`函数用于获取上下文实例的当前状态信息（比如SR引擎关联的UI，音频信号状态等）。
+
+对来自SR引擎的`SPEI_REQUEST_UI`事件感兴趣的图形应用程序可以调用 `ISpRecoContext::GetStatus`，并检查`szRequestTypeOfUI`字段来检查SR引擎最后请求的UI类型。
+在应用程序调用`ISpRecognizer::DisplayUI`之后，SR引擎可以通过调用[`ISpSREngineSite::AddEvent`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413374(v=vs.85))且参数设置为`NULL`来清除`szRequestTypeOfUI`字段。
+
+应用程序还可以定期查询识别上下文状态以检查音频信号质量（另请参阅[`SPINTERFERENCE`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431851(v=vs.85))）并做出适当回应。
+应用程序还可以提示用户访问SR引擎的麦克风训练UI，以提高音频信号质量（请参阅[`SPDUI_MicTraining`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431891(v=vs.85))），或提示用户使用控制面板中的语音属性来修改音频设置（请参阅[`SPDUI_AudioProperties`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431887(v=vs.85))和[`SPDUI_AudioVolume`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431889(v=vs.85))）。
+
+**函数原型**
+
+```c++
+HRESULT GetStatus(SPRECOCONTEXTSTATUS *pStatus);
+```
+
+**参数**
+
+* `pStatus`
+  [out] 该参数为一个接收上下文实例信息的结构体`SPRECOCONTEXTSTATUS`地址的指针。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+
+**示例**
+
+以下的代码展示了对于SR引擎UI请求的`ISpRecoContext::GetStatus`函数使用：
+```c++
+// Declare local identifiers:
+HRESULT                    hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+CComPtr<ISpRecognizer>     cpRecognizer;
+SPRECOCONTEXTSTATUS        contextStatus;
+BOOL                       fSupported;
+	
+// Assume UI request [SPEI_REQUEST_UI] has been received.
+
+// Check what kind of UI the SR Engine wants.
+hr = cpRecoContext->GetStatus(&contextStatus;);
+
+if (SUCCEEDED(hr))
+{
+   // Get a reference to the SR Engine.
+   hr = cpRecoContext->GetRecognizer(&cpRecognizer;);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Sanity check that the UI type is supported.
+   hr = cpRecognizer->IsUISupported(contextStatus.szRequestTypeOfUI, NULL, NULL, &fSupported;);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Ask the SR engine to display the UI and use the default window title.
+   hr = cpRecognizer->IsUISupported(contextStatus.szRequestTypeOfUI, NULL, NULL, &fSupported;);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Do something here.
+}
+```
+
+### 6.4 SetVoice函数
+
+**介绍**
+
+`ISpRecoContext::SetVoice`函数设置与该实例相关联的`ISpVoice`实例。
+
+对输入和输出资源使用同一个音频格式会对不支持全双工音频的声卡来说很有用（也就是输出格式必须要与输入格式匹配，所以当输入格式质量比输出格式质量低时，输出格式质量将会降低到与输入格式质量一样）。
+
+当使用该函数后，可以使用`ISpRecoContext::GetVoice`函数来获取设置的`ISpVoice`实例。
+
+**函数原型**
+
+```c++
+HRESULT SetVoice(ISpVoice *pVoice, BOOL fAllowFormatChanges);
+```
+
+**参数**
+
+* `pStatus`
+  [in] 该参数为一个接收`ISpVoice`实例地址的指针，表示关联的`ISpVoice`实例。
+  如果该参数为`NULL`，表示实例当前关联的`ISpVoice`实例将会被释放。
+* `fAllowFormatChanges`
+  [in] 该参数为一个布尔值，表示SAPI是否改变该语音的音频格式以适应SR引擎的格式。
+  当该参数设置为`TRUE`时，该语音的音频输出格式将会被设置为与SR引擎的音频输入格式一样的格式（详见[`ISpRecognizer`接口](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413260(v=vs.85))和[`ISpSREngine::GetInputAudioFormat`函数](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413404(v=vs.85))）。
+  但如果该语音对象已经与特定的流格式绑定时，就算该参数设置为`TRUE`，也不会改变该语音的音频格式。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+
+**示例**
+
+以下的代码展示了`ISpRecoContext::SetVoice`函数的使用和打断式模式的设计：
+```c++
+// Declare local identifiers:
+HRESULT	                   hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+CComPtr<ISpVoice>          cpVoice;
+
+// Create a shared recognition context.
+hr = cpRecoContext.CoCreateInstance(CLSID_SpSharedRecoContext);
+
+if (SUCCEEDED(hr))
+{
+   // Create a voice.
+   hr = cpVoice.CoCreateInstance(CLSID_SpVoice);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Associate the voice with the context
+   // (with same audio format as context).
+   hr = cpRecoContext->SetVoice(cpVoice, TRUE);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Tell the associated Voice to stop speaking when
+   // the SR Engine hears a recognizable sound.
+   hr = cpRecoContext->SetVoicePurgeEvent(SPFEI(SPEI_SOUND_START));
+}
+
+if (SUCCEEDED(hr))
+{
+   // Do stuff here.
+}
+```
+
+### 6.5 SetVoicePurgeEvent函数
+
+**介绍**
+
+`ISpRecoContext::SetVoicePurgeEvent`函数用于设置某些SR事件，这些事件的触发会终止与该上下文实例相关联的`ISpVoice`实例的音频输出并清除当前所有的朗读请求。
+
+上下文实例的感兴趣事件将会自动添加这些所设置的事件。
+可以使用函数`ISpRecoContext::GetVoicePurgeEvent`来获取这些事件。
+
+程序可以使用函数`ISpRecoContext::GetVoice`来获取与之关联的`ISpVoice`实例，还可以设置SR引擎在接收到声音时(`SPEI_SOUND_START`事件)停止并清除TTS语音朗读。
+
+该函数通常用于打断式模式中，比如，当一个用户呼叫电话服务时，服务器会使用TTS语音来进行服务提示，用户在说话时，TTS语音将停止朗读。
+
+**函数原型**
+
+```c++
+HRESULT SetVoicePurgeEvent(ULONGLONG ullEventInterest);
+```
+
+**参数**
+
+* `ullEventInterest`
+  [in] 该参数接收表示SR事件的`SPEVENTENUM`枚举类型的成员。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+
+**示例**
+
+以下的代码展示了`ISpRecoContext::SetVoicePurgeEvent `函数的使用和打断式模式的设计：
+```c++
+// Declare local identifiers:
+HRESULT	                   hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+CComPtr<ISpVoice>          cpVoice;
+
+// Create a shared recognition context.
+hr = cpRecoContext.CoCreateInstance(CLSID_SpSharedRecoContext);
+
+if (SUCCEEDED(hr))
+{
+   // Create a voice from the context (with
+   // same audio format as context).
+   hr = cpRecoContext->GetVoice(&cpVoice;);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Tell the associated Voice to stop speaking when
+   // the SR Engine hears a recognizable sound.
+   hr = cpRecoContext->SetVoicePurgeEvent(SPFEI(SPEI_SOUND_START));
+}
+
+if (SUCCEEDED(hr))
+{
+   // Do stuff here.
+}
+```
+
 ## 7. ISpRecognizer接口的函数
 
 `ISpRecognizer`接口用于控制SR引擎的各个方面，一个识别器实例可以关联多个上下文(不过同一时间只能关联一个)。
@@ -1403,8 +1604,125 @@ if (SUCCEEDED(hr))
 
 **接口常用函数简介**
 
-识别器实例可以指定特定的同类型的SR引擎(用`ISpRecognizer::SetRecognizer`函数)、设置SR引擎的输入流(用`ISpRecognizer::SetInput`函数)和配置文件(用`ISpRecognizer::SetRecoProfile`函数)等操作。
+识别器实例可以指定特定的同类型的SR引擎(用`ISpRecognizer::SetRecognizer`函数)、设置SR引擎的输入流(用`ISpRecognizer::SetInput`函数，进程内识别器必须要使用该函数才能接收音频流)和配置文件(用`ISpRecognizer::SetRecoProfile`函数)等操作。
 有关设置方面的操作都有默认设置。当进行这些设置操作时，需要当前SR引擎处于非使用状态(不在处理音频)才能进行。
+
+### 7.1 SetInput函数
+
+**介绍**
+
+`ISpRecognizer::SetInput`函数指定SR引擎需要使用的音频输入流(设备)。
+
+该函数可以将识别器实例的输入流切换为波形输入流、不同的声卡设备或者自定义的音频对象。
+
+当我们创建一个共享型识别器实例时，SAPI会自动为该实例设置音频输入流。
+我们可以使用该函数并将参数`pUnkInput`设为`NULL`使该识别器实例强制重新检查默认设备并重新将音频输入流设置为该设备。（比如当识别时，默认音频输入对象会改变，新的音频输入将会被使用）。
+
+但当我们创建一个进程内识别器实例时，SAPI不会自动为该实例设置音频输入流。所以我们必须使用该函数并将参数`pUnkInput`设为非空值，从而设置并启动实例的音频输入流。
+如果该函数没有被调用，则像`ISpRecoGrammar::SetRuleState`的类似函数将会返回`SP_STREAM_UNITIALIZED`值，表示识别器没有启动。
+
+如果SR引擎当前在处理音频数据，则对该函数的调用会返回`PERR_ENGINE_BUSY`值。
+
+输入流对象将会为实时流实现`IStream`、`ISpStreamFormat`和`ISpAudio`接口。程序不应该使用这些接口的一些方法，比如会实际改变音频设备状态的方法，会在SAPI使用流时从流读取数据的方法。
+例如，使用`IStream::Read`从应用程序中读取数据会阻止将正确的数据传递给SR引擎。使用`ISpAudio::SetState`更改音频状态将使音频设备进入意外状态，并可能导致错误。因此，所有的音频控制应该是由SAPI完成。
+
+**函数原型**
+
+```c++
+HRESULT SetInput(IUnknown *pUnkInput, BOOL fAllowFormatChanges);
+```
+
+**参数**
+
+* `pUnkInput`
+  [in] 该参数为一个指向音频输入流设备令牌的指针。
+  该参数可以指向代表音频输入设备的令牌对象，也可以指向实现了`ISpStreamFormat`接口的对象。
+* `fAllowFormatChanges`
+  [in] 该参数为一个布尔值，表示SAPI是否改变音频输入流的格式以适应SR引擎的首选格式。
+  一般来说，设为`TRUE`就行；但是当语音识别和音频输出同时执行时，有些声卡可能会要求音频的输入和输出流的格式相同，所以此时设为`FALSE`可以阻止音频输入流的格式被改变。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+* `SPERR_ENGINE_BUSY`
+
+**示例**
+
+以下示例说明了`ISpRecognizer::SetInput`函数的使用：
+```c++
+// Declare local identifiers:
+HRESULT                      hr = S_OK;
+CComPtr<ISpRecognizer>       cpRecognizer;
+CComPtr<ISpObjectToken>      cpObjectToken;
+CComPtr<ISpAudio>            cpAudio;
+
+// Set up the inproc recognizer audio
+// input with an audio input object token.
+
+// Get the default audio input token.
+hr = SpGetDefaultTokenFromCategoryId(SPCAT_AUDIOIN, &cpObjectToken;);
+
+if (SUCCEEDED(hr))
+{
+   // Set the audio input to our token.
+   hr = cpRecognizer->SetInput(cpObjectToken, TRUE);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Set up the inproc recognizer audio input with an audio input object.
+
+   // Create the default audio input object.
+   hr = SpCreateDefaultObjectFromCategoryId(SPCAT_AUDIOIN, &cpAudio;);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Set the audio input to our object.
+   hr = cpRecognizer->SetInput(cpAudio, TRUE);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Ask the shared recognizer to re-check the default audio input token.
+   hr = cpRecognizer->SetInput(NULL, TRUE);
+}
+
+if (SUCCEEDED(hr))
+{
+   // If hr = SPERR_ENGINE_BUSY, then retry later.
+}
+```
+
+### 7.2 SetRecoState函数
+
+**介绍**
+
+`ISpRecognizer::SetRecoState`函数设置SR引擎的状态。
+
+当识别器为共享型时，该识别器状态为全局设置。
+如果一个使用共享型识别器的程序改变了该识别器状态，则会影响到所有使用该识别器的程序中的识别器状态。因此，程序在使用共享型识别器时，需要小心使用该函数。
+
+使用该函数改变识别器状态会导致`SPEI_RECO_STATE_CHANGE`事件的触发(对于设置该事件的实例来说)。
+
+**函数原型**
+
+```c++
+HRESULT SetRecoState(SPRECOSTATE NewState);
+```
+
+**参数**
+
+* `NewState`
+  [in] 该参数接受枚举类型[`SPRECOSTATE`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431860(v=vs.85))的成员，用以表示SR引擎的状态。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
 
 ## 8. ISpRecoGrammar接口的函数
 
@@ -1453,7 +1771,7 @@ if (SUCCEEDED(hr))
   使用`ISpRecoGrammar::SetDictationState`函数设置语法设置器实例中的听写式语法主题是否激活。
 
 以下是语法设置器中其他常用函数的介绍：
-* 用于含有文本框程序的函数：
+* 用于含有文本框的程序的函数：
   使用`ISpRecoGrammar::SetWordSequenceData`和`ISpRecoGrammar::SetWordSequenceData`函数可以让我们使用语音来操作程序文本框中的文字。
   比如可以选择程序文本框中的某些文字，还可以对其进行信息插入操作。
 * 判断某词语是否有发音：
@@ -1850,7 +2168,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
 
   `PHRASE`或者`P`标签通常包含：
   * 一个文本内容，表示该标签对应的短语，该短语用于SR引擎的语音识别。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule2，含有三个短语，
   该语法规则只能识别语句：
@@ -1868,7 +2186,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
 
   `LIST`或者`L`标签通常包含：
   * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语的任意一个都可以作为该标签所表示的短语。
-  * 可以有一个`PROPNAME`和`PROPID`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有一个`PROPNAME`和`PROPID`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个LIST标签，
   该语法规则能识别以下语句：
@@ -1892,7 +2210,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
   `OPT`或者`O`标签通常包含：
   * 一个文本内容，表示该标签所包含的一个短语，该短语在规则中为可选。
   * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语在规则中都为可选。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个OPT和LIST标签，
   该语法规则能识别以下语句：
@@ -1918,7 +2236,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
 
   `RULEREF`标签通常包含：
   * 一个`NAME`或`REFID`属性，分别表示该短语所引用的规则的名称和编号（必须要和所引用的规则匹配）。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[SPPHRASEPROPERTY结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个LIST和RULEREF标签，
   该语法规则能识别以下语句：
@@ -2044,3 +2362,4 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
     </RULE>
 </GRAMMAR>
 ```
+
