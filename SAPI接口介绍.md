@@ -1227,7 +1227,7 @@ typedef struct SPEVENT
 
 该结构体包含SR引擎事件中`SPEI_HYPOTHESIS`、`SPEI_RECOGNITION`和`SPEI_FALSE_RECOGNITION`等事件中的识别信息。
 
-短语信息包括语言、音频、事件时序、文本(显示文本和词汇文本)、逆文本替换、语义标签(以及语义属性)和由SR引擎决定的，引擎指定的可选短语数据块。
+识别的语句信息包括语言、音频、事件时序、文本(显示文本和词汇文本)、逆文本替换、语义标签(以及语义属性)和由SR引擎决定的，引擎指定的可选短语数据块。
 
 SAPI使用函数`CoTaskMemAlloc`来创建该结构体的空间，所以当使用完毕时，需要手动使用函数`CoTaskMemAlloc`来释放。
 
@@ -1263,27 +1263,27 @@ typedef struct SPPHRASE
 * `cbSize`
   表示该结构体的字节大小。
 * `LangID`
-  表示识别该短语的语言ID号。
+  表示识别该语句的语言ID号。
 * `wReserved`
   保留给未来使用。
 * `ullGrammarID`
-  表示用于识别该短语的主规则ID。
+  表示用于识别该语句的主规则ID。
 * `ftStartTime`
-  表示基于Win32 API、`SystemTimeToFileTime`和`GetSystemTime`作为64位值的该短语音频开始的绝对时间。
+  表示基于Win32 API、`SystemTimeToFileTime`和`GetSystemTime`作为64位值的该语句音频开始的绝对时间。
   当应用程序使用wav文件输入时，SAPI将流位置和开始时间信息设置为零。
 * `ullAudioStreamPosition`
-  表示该短语相对于音频输入流的偏移位置。
+  表示该语句相对于音频输入流的偏移位置。
   如果向下采样一个音频流，则该参数将会是原始音频流的字节位置。
 * `ulAudioSizeBytes`
-  表示该短语的音频数据字节大小。
+  表示该语句的音频数据字节大小。
 * `ulRetainedSizeBytes`
-  表示已保存的该短语的音频数据字节大小(使用函数`ISpRecoContext::SetAudioOptions`来设置保存音频)。
+  表示已保存的该语句的音频数据字节大小(使用函数`ISpRecoContext::SetAudioOptions`来设置保存音频)。
 * `ulAudioSizeTime`
-  表示该短语的音频长度，以100纳秒为单位。
+  表示该语句的音频长度，以100纳秒为单位。
 * `Rule`
-  表示用于识别该短语的主规则名称。
+  表示用于识别该语句的主规则名称。
 * `pProperties`
-  表示指向该短语的语义属性树的根节点的指针。
+  表示指向该语句的语义属性树根节点的指针，也就是指向该语句第一个含有语义属性的短语的语义属性。
 * `pElements`
   表示指向短语元素数组的指针。
   该数组元素的数量包含在语法规则中。每个短语元素包括位置和文本信息，这些信息包含词汇和显示格式。
@@ -1293,7 +1293,7 @@ typedef struct SPPHRASE
 * `pReplacements`
   表示指向文本替换数组的指针。
 * `SREngineID`
-  表示用于识别该短语的SR引擎的GUID号。
+  表示用于识别该语句的SR引擎的GUID号。
 * `ulSREnginePrivateDataSize`
   表示SR引擎的私有数据的字节大小。
 * `pSREnginePrivateData`
