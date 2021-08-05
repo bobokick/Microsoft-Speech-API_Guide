@@ -1113,10 +1113,10 @@ typedef enum SPEVENTENUM
   要注意该事件要配合`SPEI_FALSE_RECOGNITION`和`SPEI_RECOGNITION`事件一起使用，来判断某词语是否识别成功。
 * `SPEI_RECOGNITION`
   表示SR引擎正在返回一个完整的成功的语句识别，该识别是对音频数据的最佳猜测。
-  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含一些识别信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
+  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含识别结果信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
 * `SPEI_HYPOTHESIS`
   表示SR引擎正在返回一个部分的短语识别，该识别是当前声音流中该短语的最佳猜测。
-  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含一些识别信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
+  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含识别结果信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
 * `SPEI_SR_BOOKMARK`
   书签事件，当SR引擎已经处理完输入流中由书签标记的位置时，就会触发该事件。
   `wParam`参数被设置为`SPREF_AutoPause`(如果`ISpRecoContext::Bookmark`被`SPBO_PAUSE`调用)，否则为0；`lParam`参数被设置为`ISpRecoContext::Bookmark`中设置的值。
@@ -1128,7 +1128,7 @@ typedef enum SPEVENTENUM
   `lParam`参数被设置为指向更改后的代表该属性名的字符串(可用辅助函数`CSpEvent::PropertyName`来取得)，紧跟在该字符串空字符的是该属性的值(可用辅助函数`CSpEvent::PropertyStringValue`来取得)。
 * `SPEI_FALSE_RECOGNITION`
   表示SR引擎对当前声音没有有效的识别(识别失败)。
-  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含一些识别信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
+  `lParam`参数被设置为指向一个`ISpRecoResult`对象的指针，该对象包含识别结果信息(可用辅助函数`CSpEvent::RecoResult`来取得)。
 * `SPEI_INTERFERENCE`
   表示SR引擎判断当前声音有干扰，该干扰妨碍了声音的成功识别。
   `lParam`参数被设置为[`SPINTERFERENCE`类型](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431851(v=vs.85))对象，该对象包含该干扰信息(可用辅助函数`CSpEvent::Interference`来取得)。
@@ -1220,6 +1220,146 @@ typedef struct SPEVENT
 该类的函数都是将一些接口的原生函数组合在一起操作的函数，作用和不用该函数的原生操作一样，只不过方便了许多。
 
 该类的具体函数及其使用详见[`CSpEvent`介绍](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431916(v=vs.85))。
+
+### 5.7 结构体SPPHRASE
+
+**介绍**
+
+该结构体包含SR引擎事件中`SPEI_HYPOTHESIS`、`SPEI_RECOGNITION`和`SPEI_FALSE_RECOGNITION`等事件中的识别信息。
+
+短语信息包括语言、音频、事件时序、文本(显示文本和词汇文本)、逆文本替换、语义标签(以及语义属性)和由SR引擎决定的，引擎指定的可选短语数据块。
+
+SAPI使用函数`CoTaskMemAlloc`来创建该结构体的空间，所以当使用完毕时，需要手动使用函数`CoTaskMemAlloc`来释放。
+
+以下是结构体`SPPHRASE`的定义
+```c++
+typedef struct SPPHRASE
+{
+    ULONG                       cbSize;
+    LANGID                      LangID;
+    WORD                        wReserved;
+    ULONGLONG                   ullGrammarID;
+    ULONGLONG                   ftStartTime;
+    ULONGLONG                   ullAudioStreamPosition;
+    ULONG                       ulAudioSizeBytes;
+    ULONG                       ulRetainedSizeBytes;
+    ULONG                       ulAudioSizeTime;
+    SPPHRASERULE                Rule;
+    const SPPHRASEPROPERTY     *pProperties;
+    const SPPHRASEELEMENT      *pElements;
+    ULONG                       cReplacements;
+    const SPPHRASEREPLACEMENT  *pReplacements;
+    GUID                        SREngineID;
+    ULONG                       ulSREnginePrivateDataSize;
+    const BYTE                 *pSREnginePrivateData;
+    LPWSTR                      pSML;
+    SPSEMANTICERRORINFO        *pSemanticErrorInfo;
+    SPSEMANTICFORMAT 	        SemanticTagFormat;
+} SPPHRASE;
+```
+
+**成员**
+
+* `cbSize`
+  表示该结构体的字节大小。
+* `LangID`
+  表示识别该短语的语言ID号。
+* `wReserved`
+  保留给未来使用。
+* `ullGrammarID`
+  表示用于识别该短语的主规则ID。
+* `ftStartTime`
+  表示基于Win32 API、`SystemTimeToFileTime`和`GetSystemTime`作为64位值的该短语音频开始的绝对时间。
+  当应用程序使用wav文件输入时，SAPI将流位置和开始时间信息设置为零。
+* `ullAudioStreamPosition`
+  表示该短语相对于音频输入流的偏移位置。
+  如果向下采样一个音频流，则该参数将会是原始音频流的字节位置。
+* `ulAudioSizeBytes`
+  表示该短语的音频数据字节大小。
+* `ulRetainedSizeBytes`
+  表示已保存的该短语的音频数据字节大小(使用函数`ISpRecoContext::SetAudioOptions`来设置保存音频)。
+* `ulAudioSizeTime`
+  表示该短语的音频长度，以100纳秒为单位。
+* `Rule`
+  表示用于识别该短语的主规则名称。
+* `pProperties`
+  表示指向该短语的语义属性树的根节点的指针。
+* `pElements`
+  表示指向短语元素数组的指针。
+  该数组元素的数量包含在语法规则中。每个短语元素包括位置和文本信息，这些信息包含词汇和显示格式。
+* `cReplacements`
+  表示文本替换数量。
+  文本替换通常基于SR引擎定义的逆向文本规范化规则(比如会将"five dollars"替换为"$5")。
+* `pReplacements`
+  表示指向文本替换数组的指针。
+* `SREngineID`
+  表示用于识别该短语的SR引擎的GUID号。
+* `ulSREnginePrivateDataSize`
+  表示SR引擎的私有数据的字节大小。
+* `pSREnginePrivateData`
+  表示指向SR引擎的私有数据的指针。
+  引擎的私有数据由每个引擎来指定，所以该数据的格式和结构不是由SAPI定义的。
+* `pSML`
+  表示指向SML(也就是包含识别结果的XML文本)的指针。
+* `pSemanticErrorInfo`
+  表示指向包含错误信息的结构的指针。
+  当生成SML时，如果出现错误信息，则会产生该结构。
+* `SemanticTagFormat`
+  表示语法中的标签格式值，详见[枚举类型`SPSEMANTICFORMAT`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431865(v=vs.85))。
+
+### 5.8 结构体SPPHRASEPROPERTY
+
+**介绍**
+
+该结构体用于储存一个语义属性值，该结构体可以用于构建语义属性树。
+
+该结构体常用于XML语法文本中的设计。
+
+以下是结构体`SPPHRASEPROPERTY`的定义
+```c++
+struct SPPHRASEPROPERTY
+{
+    LPCWSTR                    *pszName;
+    ULONG                       ulId;
+    LPCWSTR                    *pszValue;
+    VARIANT                     vValue;
+    ULONG                       ulFirstElement;
+    ULONG                       ulCountOfElements;
+    const  SPPHRASEPROPERTY    *pNextSibling;
+    const  SPPHRASEPROPERTY    *pFirstChild;
+    float                       SREngineConfidence;
+    signed char                 Confidence;
+};
+```
+
+**成员**
+
+* `pszName`
+  表示语义属性的名称，该名称为以空字符结尾的字符串。
+  该参数由XML语法文本中的`PROPNAME`属性来设置。
+* `ulId`
+  表示语义属性的ID。
+  该参数由XML语法文本中的`PROPID`属性来设置。
+* `pszValue`
+  表示语义属性中的一个以空字符结尾的字符串。
+  该参数由XML语法文本中的`VALSTR`属性来设置。
+* `vValue`
+  表示语义属性的变体值，该值必须设置为`VT_BOOL`，`VT_I4`，`VT_R4`，`VT_R8`或者`VT_BYREF`（只用于动态语法）中的一种。
+  该参数由XML语法文本中的`VAL`属性来设置。
+* `ulFirstElement`
+  表示该语义属性所覆盖的第一个短语元素。
+* `ulCountOfElements`
+  表示该语义属性所覆盖的短语元素数量。
+* `pNextSibling`
+  表示指向当前语义属性树的下一个兄弟节点的指针。
+* `pFirstChild`
+  表示指向当前语义属性树的第一个子节点的指针。
+* `SREngineConfidence`
+  表示由SR引擎计算的该语义属性的置信度。
+  该值范围由SR引擎指定，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
+* `Confidence`
+  表示由SAPI计算的该语义属性的置信度。
+  该值为`SP_LOW_CONFIDENCE`、`SP_NORMAL_CONFIDENCE`或`SP_HIGH_CONFIDENCE`中的一种，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
 
 ## 6. ISpRecoContext接口的函数
 
@@ -2168,16 +2308,16 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
 
   `PHRASE`或者`P`标签通常包含：
   * 一个文本内容，表示该标签对应的短语，该短语用于SR引擎的语音识别。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有各种语义属性，也就是`PROPNAME`、`PROPID`、`VALSTR`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VALSTR`或`VAL`属性不能单独使用，必须要和`PROPNAME`和`PROPID`属性的任意一个或全部一起使用），分别表示该标签所含有的一些信息（这些属性储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule2，含有三个短语，
   该语法规则只能识别语句：
   "今天我要学习"
   -->
   <RULE NAME="rule2" TOPLEVEL="ACTIVE">
-      <P PROPNAME="ph1" PROPID="1" VAL="30">今天</P>
+      <P PROPNAME="ph1" PROPID="1" VALSTR="today" VAL="30">今天</P>
       <P PROPID="2">我要</P>
-      <P>学习</P>
+      <P PROPID="1" VALSTR="study">学习</P>
   </RULE>
   ```
 
@@ -2186,7 +2326,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
 
   `LIST`或者`L`标签通常包含：
   * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语的任意一个都可以作为该标签所表示的短语。
-  * 可以有一个`PROPNAME`和`PROPID`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有各种语义属性，也就是`PROPNAME`和`PROPID`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用），分别表示该标签所含有的一些信息（这些属性储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个LIST标签，
   该语法规则能识别以下语句：
@@ -2210,7 +2350,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
   `OPT`或者`O`标签通常包含：
   * 一个文本内容，表示该标签所包含的一个短语，该短语在规则中为可选。
   * 零个或多个`PHRASE`/`P`标签、`LIST`/`L`标签、`RULEREF`标签或者`OPT`/`O`标签，这些标签所表示的短语在规则中都为可选。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有各种语义属性，也就是`PROPNAME`、`PROPID`、`VALSTR`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VALSTR`或`VAL`属性不能单独使用，必须要和`PROPNAME`和`PROPID`属性的任意一个或全部一起使用），分别表示该标签所含有的一些信息（这些属性储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个OPT和LIST标签，
   该语法规则能识别以下语句：
@@ -2236,7 +2376,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
 
   `RULEREF`标签通常包含：
   * 一个`NAME`或`REFID`属性，分别表示该短语所引用的规则的名称和编号（必须要和所引用的规则匹配）。
-  * 可以有一个`PROPNAME`、`PROPID`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VAL`属性不能单独使用，必须要和其他两个属性的任意一个或全部一起使用），分别表示该短语所含有的一些信息（可储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
+  * 可以有各种语义属性，也就是`PROPNAME`、`PROPID`、`VALSTR`和`VAL`属性（其中`PROPNAME`和`PROPID`属性可以单独或一起使用；`VALSTR`或`VAL`属性不能单独使用，必须要和`PROPNAME`和`PROPID`属性的任意一个或全部一起使用），分别表示该标签所含有的一些信息（这些属性储存于[`SPPHRASEPROPERTY`结构体](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125126(v=vs.85))中）。
   ```xml
   <!-- 主规则rule，含有一个LIST和RULEREF标签，
   该语法规则能识别以下语句：
@@ -2361,5 +2501,279 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
         <P>...</P>
     </RULE>
 </GRAMMAR>
+```
+
+## 9. ISpRecoResult接口的函数
+
+`ISpRecoResult`接口是用于程序获取SR引擎事件中`SPEI_HYPOTHESIS`、`SPEI_RECOGNITION`和`SPEI_FALSE_RECOGNITION`这些事件中的识别结果信息。
+
+`ISpRecoResult`接口继承了`ISpPhrase`接口，所以我们可以通过使用`ISpPhrase`接口的函数来获取识别结果中识别的短语方面的信息。
+
+该接口的实例不是由我们自己所建，而是使用`ISpEventSource::GetEvents`函数或者辅助函数类`CSpEvent`的函数`CSpEvent::GetFrom`来获取上下文实例中上面所写的那些事件的信息，再通过`(ISpRecoResult*)SPEVENT.lParam`或者`CSpEvent::RecoResult`来获取含有这些事件识别结果信息的`ISpRecoResult`实例。
+
+### 9.1 GetResultTimes函数
+
+**介绍**
+
+`ISpRecoResult::GetResultTimes`函数用于获取与识别结果相关的时间信息。
+
+该信息记录了从SR引擎开始接收该音频到识别结束的时间，以秒为单位。
+
+**函数原型**
+
+```c++
+HRESULT GetResultTimes(SPRECORESULTTIMES *pTimes);
+```
+
+**参数**
+
+* `pTimes`
+  [out] 该参数为一个指向包含时间信息的`SPRECORESULTTIMES`结构体的指针。
+
+**返回值**
+
+* `S_OK`
+* `E_POINTER`
+* `SPERR_NOT_FOUND`
+
+### 9.2 GetAlternates函数
+
+**介绍**
+
+`ISpRecoResult::GetAlternates`函数用于获取一个指针数组，该指针数组中的元素都指向包含替换短语的[`ISpPhraseAlt`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450903(v=vs.85))对象。
+
+**函数原型**
+
+```c++
+HRESULT GetAlternates(ULONG ulStartElement, ULONG cElements, ULONG ulRequestCount, ISpPhraseAlt **ppPhrases, ULONG *pcPhrasesReturned);
+```
+
+**参数**
+
+* `ulStartElement`
+  [in] 该参数为开始获取元素的索引值，索引从`0`开始。
+* `cElements`
+  [in] 该参数为需要获取的元素数量。
+  如果需要获取所有元素，则该参数可以设为枚举类型`SPPHRASERNG`的成员`SPPR_ALL_ELEMENTS`。
+* `ulRequestCount`
+  [in] 该参数为需要替换短语元素的数量。
+* `ppPhrases`
+  [out] 该参数为包含替换短语的`ISpPhraseAlt`对象地址。
+  从`ulStartElement`参数开始，`cElements`长度的元素是需要被替换的元素。其他剩余的元素将会被包括在每个替换短语中。
+* `pcPhrasesReturned`
+  [out] 该参数为已替换短语的实际数量。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+* `E_OUTOFMEMORY`
+* `E_INVALIDARG`
+
+**示例**
+
+以下示例说明了使用`ISpRecoResult::GetAlternates`函数来获取和执行替换短语：
+```c++
+// Declare local identifiers:
+HRESULT                    hr = S_OK;
+const USHORT               MY_MAX_ALTERNATES = 10;
+CComPtr<ISpRecoResult>     cpRecoResult;
+CComPtr<ISpPhrase>         cpPhrase;
+CComPtr<ISpPhraseAlt>      pcpPhraseAlt[MY_MAX_ALTERNATES];
+SPPHRASE                   *pPhrase;
+WCHAR                      *pwszText;
+WCHAR                      *pwszAlternate;
+BOOL                       fMoreAppropriate;
+LONG                       ulCount;
+
+// ... Obtain a recognition result object from the recognizer ...
+
+// Get the recognized phrase object.
+hr = cpRecoResult->GetPhrase(&pPhrase;);
+
+if (SUCCEEDED(hr))
+{
+   // Get the phrase's text.
+   hr = cpPhrase->GetText(SP_GETWHOLEPHRASE, SP_GETWHOLEPHRASE, TRUE, &pwszText;, NULL);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Check the phrase's text... Assume that
+   // the phrase isn't a correct recognition.
+
+   // Get the top MY_MAX_ALTERNATES alternates
+   // to the entire recognized phrase.
+   hr = cpRecoResult->GetAlternates(pPhrase->Rule.ulFirstElement,
+        pPhrase->Rule.ulCountOfElements,
+        MY_MAX_ALTERNATES,
+        (ISpPhraseAlt**) pcpPhraseAlt,
+        &ulCount;);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Check each alternate in order of highest likelihood.
+   for (int i = 0; i < ulCount; i++)
+   {
+      hr = pcpPhraseAlt[i]->GetText(SP_GETWHOLEPHRASE, SP_GETWHOLEPHRASE, TRUE, &pwszAlternate;, NULL);
+
+      if (SUCCEEDED(hr))
+      {
+         // ... Check if this alternate is more appropriate ...
+
+         // If it is more appropriate, then commit the alternate--
+         if (fMoreAppropriate)
+         {
+            hr = pcpPhraseAlt[i]->Commit();
+         }
+
+         if (SUCCEEDED(hr))
+         {
+            // Release system resources:
+            if (pwszAlternate) ::CoTaskMemFree(pwszAlternate);
+            if (pwszText) ::CoTaskMemFree(pwszText);
+         }
+      }
+   }
+}
+
+// Free the initial phrase object.
+if (pPhrase) ::CoTaskMemFree(pPhrase);
+```
+
+## 10. ISpPhrase接口的函数
+
+`ISpPhrase`接口是用于程序获取识别结果中的短语信息。
+
+程序可以使用该接口来获取比如识别文本，识别所用的规则和语义标签及属性等信息，还可以使用该接口来序列化短语数据并将其放入流中，是这些数据能够保存在磁盘，网络以及内存中。
+
+该接口的函数通过程序获取的`ISpRecoResult`实例来使用。
+
+### 10.1 GetPhrase函数
+
+**介绍**
+
+`ISpPhrase::GetPhrase`函数用于获取短语中一些数据信息。
+
+**函数原型**
+
+```c++
+HRESULT GetPhrase(SPPHRASE **ppCoMemPhrase);
+```
+
+**参数**
+
+* `ppCoMemPhrase`
+  [out] 该参数接收指向含有短语信息的结构体`SPPHRASE`的指针的地址。
+  如果没有短语被识别，则可能会为`NULL`。
+  使用完毕后，调用者需要使用函数`CoTaskMemFree`来释放该结构体对象，但如果为`NULL`，则不会为该结构体分配内存。所以就不需要释放。
+
+**返回值**
+
+* `S_OK`
+* `E_POINTER`
+* `E_OUTOFMEMORY`
+
+**示例**
+
+以下示例说明了使用`ISpPhrase::GetPhrase`函数来获取并显示识别文本，还显示识别所用的规则：
+```c++
+// Declare local identifiers:
+HRESULT                   hr = S_OK;
+CComPtr<ISpRecoResult>    cpRecoResult;
+SPPHRASE                  *pPhrase;
+WCHAR                     *pwszText;
+HWND                      hwndParent;
+
+// ... Obtain a recognition result object from the recognizer ...
+
+// Get the recognized phrase object.
+hr = cpRecoResult->GetPhrase(&pPhrase;);
+
+if (SUCCEEDED (hr))
+{
+   // Get the phrase's text.
+   hr = cpRecoResult->GetText(SP_GETWHOLEPHRASE, SP_GETWHOLEPHRASE, TRUE, &pwszText;, NULL);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Display the recognized text and the rule name in a message box.
+   MessageBoxW(hwndParent, pwszText, pPhrase->Rule.pszName, MB_OK);
+}
+```
+
+### 10.2 GetText函数
+
+**介绍**
+
+`ISpPhrase::GetText`函数用于获取短语文本中一些文本信息。
+
+该文本用于显示短语中的某些元素的文本，该文本的显示属性通过参数`pbDisplayAttributes`来设置。
+
+**函数原型**
+
+```c++
+HRESULT GetText(ULONG ulStart, ULONG ulCount, BOOL fUseTextReplacements, [annotation ("__deref_out")] LPWSTR **ppszCoMemText, [annotation ("__out_ecount_opt(1)")] BYTE *pbDisplayAttributes);
+```
+
+**参数**
+
+* `ulStart`
+  [in] 该参数指定短语文本中要获取的第一个元素的位置。
+* `ulCount`
+  [in] 该参数指定短语文本中要获取的元素数量。
+* `fUseTextReplacements`
+  [in] 该参数为布尔值，表示是否使用替换文本。
+  比如，如果使用替换文本，则文本"write new check for twenty dollars"将会被替换为"write new check for $20"，关于替换的更多信息，详见[SR引擎指导书](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431799(v=vs.85))。
+* `ppszCoMemText`
+  [out] 该参数接收含有所要获取的文本信息的字符串地址。
+  使用完毕后，调用者需要使用函数`CoTaskMemFree`来释放该对象。
+* `pbDisplayAttributes`
+  [out] 该参数指向含有文本信息显示属性的枚举类型[`SPDISPLAYATTRIBUTES`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431842(v=vs.85))成员。
+  文本信息显示属性用于程序调整该文本的一些显示属性。
+  比如，语音"hello comma world period"包含一个结尾句号，所以语音识别会包含`SPAF_TWO_TRAILING_SPACES`来通知程序不需要额外的文本处理逻辑来处理该单词。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_POINTER`
+* `E_OUTOFMEMORY`
+* `E_INVALIDARG`
+
+**示例**
+
+以下示例说明了使用`ISpPhrase::GetText`函数来获取识别短语文本中的一部分：
+```c++
+// Declare local identifiers:
+HRESULT                   hr = S_OK;
+CComPtr<ISpRecoResult>    cpRecoResult;
+SPPHRASE                  *pPhrase;
+WCHAR                     *pwszText;
+
+// ... Obtain a recognition result object from the recognizer ...
+
+// Get the recognized phrase object.
+hr = cpRecoResult->GetPhrase(&pPhrase;);
+
+if (SUCCEEDED (hr))
+{
+   // Get the phrase's entire text string, including replacements.
+   hr = cpRecoResult->GetText(SP_GETWHOLEPHRASE, SP_GETWHOLEPHRASE, TRUE, &pwszText;, NULL);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Get the phrase's first 2 words, excluding replacements.
+   hr = cpRecoResult->GetText(pPhrase->Rule.ulFirstElement, 2, FALSE, &pwszText;, NULL);
+}
+
+if (SUCCEEDED (hr))
+{
+   // Do some more stuff.
+}
 ```
 
