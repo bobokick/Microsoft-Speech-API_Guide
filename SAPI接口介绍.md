@@ -1283,7 +1283,8 @@ typedef struct SPPHRASE
 * `Rule`
   表示用于识别该语句的主规则名称。
 * `pProperties`
-  表示指向该语句的语义属性树根节点的指针，也就是指向该语句第一个含有语义属性的短语的语义属性。
+  表示指向该语句的语义属性树的根节点的指针，也就是指向该语句第一个含有语义属性的短语的语义属性。
+  对于XML语法文本来说，如果第一个含有语义属性的短语为`OPT`标签中的短语，且该`OPT`标签还含有语义属性，则该语义属性树的根节点为该`OPT`标签的语义属性。
 * `pElements`
   表示指向短语元素数组的指针。
   该数组元素的数量包含在语法规则中。每个短语元素包括位置和文本信息，这些信息包含词汇和显示格式。
@@ -1313,7 +1314,7 @@ typedef struct SPPHRASE
 
 该结构体用于储存一个语义属性值，该结构体可以用于构建语义属性树。
 
-该结构体常用于XML语法文本中的设计。
+语义属性就是一个短语或者一组短语所包含的一些信息，通常由XML语法文本中语义属性来设置。
 
 以下是结构体`SPPHRASEPROPERTY`的定义
 ```c++
@@ -1347,19 +1348,22 @@ struct SPPHRASEPROPERTY
   表示语义属性的变体值，该值必须设置为`VT_BOOL`，`VT_I4`，`VT_R4`，`VT_R8`或者`VT_BYREF`（只用于动态语法）中的一种。
   该参数由XML语法文本中的`VAL`属性来设置。
 * `ulFirstElement`
-  表示该语义属性所覆盖的第一个短语元素。
+  表示该语义属性所覆盖的第一个单词或短语的索引值（索引值从`0`开始）。
+  在XML语法文本中，对于非`OPT`或`LIST`标签的语义属性来说，该语义属性可视为含有零个或多个单词的数组，所以该参数值为其数组第一个单词元素的索引值；而对于`OPT`或`LIST`标签的语义属性来说，则其可视为短语数组，所以该参数值为第一个短语的索引值。
 * `ulCountOfElements`
-  表示该语义属性所覆盖的短语元素数量。
+  表示该语义属性所覆盖的单词或短语元素数量。
+  在XML语法文本中，对于非`OPT`或`LIST`标签的语义属性来说，该语义属性可视为含有零个或多个单词的数组；而对于`OPT`或`LIST`标签的语义属性来说，则其可视为短语数组。
+  所以该参数值为其数组的大小。
 * `pNextSibling`
-  表示指向当前语义属性树的下一个兄弟节点的指针。
+  表示指向当前语义属性的下一个兄弟节点的指针。
 * `pFirstChild`
-  表示指向当前语义属性树的第一个子节点的指针。
+  表示指向当前语义属性的第一个子节点的指针。
 * `SREngineConfidence`
   表示由SR引擎计算的该语义属性的置信度。
-  该值范围由SR引擎指定，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
+  该参数值范围由SR引擎指定，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
 * `Confidence`
   表示由SAPI计算的该语义属性的置信度。
-  该值为`SP_LOW_CONFIDENCE`、`SP_NORMAL_CONFIDENCE`或`SP_HIGH_CONFIDENCE`中的一种，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
+  该参数值为`SP_LOW_CONFIDENCE`、`SP_NORMAL_CONFIDENCE`或`SP_HIGH_CONFIDENCE`中的一种，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
 
 ## 6. ISpRecoContext接口的函数
 
