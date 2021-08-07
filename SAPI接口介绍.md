@@ -1229,7 +1229,7 @@ typedef struct SPEVENT
 
 识别的语句信息包括语言、音频、事件时序、文本(显示文本和词汇文本)、逆文本替换、语义标签(以及语义属性)和由SR引擎决定的，引擎指定的可选短语数据块。
 
-SAPI使用函数`CoTaskMemAlloc`来创建该结构体的空间，所以当使用完毕时，需要手动使用函数`CoTaskMemAlloc`来释放。
+SAPI使用函数`CoTaskMemAlloc`来创建该结构体的空间，所以当使用完毕时，需要手动使用函数`CoTaskMemFree`来释放。
 
 以下是结构体`SPPHRASE`的定义
 ```c++
@@ -1284,7 +1284,10 @@ typedef struct SPPHRASE
   表示用于识别该语句的主规则名称。
 * `pProperties`
   表示指向该语句的语义属性树的根节点的指针，也就是指向该语句第一个含有语义属性的短语的语义属性。
-  对于XML语法文本来说，如果第一个含有语义属性的短语为`OPT`标签中的短语，且该`OPT`标签还含有语义属性，则该语义属性树的根节点为该`OPT`标签的语义属性。
+  对于XML语法文本来说：
+  根节点就是识别该语句的主规则中的第一个含有语义属性的标签（对于所有的非`OPT`标签，其包含的内嵌标签也算在内）。
+  不过对于`LIST`标签来说，即使该`LIST`标签含有语义属性，但如果其内本次所识别的短语对应的标签本身也含有语义属性时，则根节点就为该短语对应标签的语义属性，否则根节点就为该`LIST`标签的语义属性。
+  如果没有一个短语或符合的标签含有语义属性，则该参数为`NULL`。
 * `pElements`
   表示指向短语元素数组的指针。
   该数组元素的数量包含在语法规则中。每个短语元素包括位置和文本信息，这些信息包含词汇和显示格式。
@@ -1348,16 +1351,18 @@ struct SPPHRASEPROPERTY
   表示语义属性的变体值，该值必须设置为`VT_BOOL`，`VT_I4`，`VT_R4`，`VT_R8`或者`VT_BYREF`（只用于动态语法）中的一种。
   该参数由XML语法文本中的`VAL`属性来设置。
 * `ulFirstElement`
-  表示该语义属性所覆盖的第一个单词或短语的索引值（索引值从`0`开始）。
-  在XML语法文本中，对于非`OPT`或`LIST`标签的语义属性来说，该语义属性可视为含有零个或多个单词的数组，所以该参数值为其数组第一个单词元素的索引值；而对于`OPT`或`LIST`标签的语义属性来说，则其可视为短语数组，所以该参数值为第一个短语的索引值。
+  表示该语义属性所覆盖的第一个单词或短语在识别结果语句中的短语位置值（位置值从`0`开始）。
+  比如短语`"开始吃饭"`的第一个单词在识别结果语句`"今天下午开始吃饭"`中的第三个位置，所以该短语的`ulFirstElement`参数为`2`。
+  在XML语法文本中，对于非`OPT`、`LIST`或`RULEREF`标签的语义属性来说，该语义属性可视为含有零个或多个单词的数组（短语中的单词划分由所指定语言对应的语法分析器决定，但我们也可以通过在单词之间加上空格而进行主动划分），所以该参数表示的是第一个单词；而对于`OPT`、`LIST`或`RULEREF`标签的语义属性来说，则其可视为短语数组（短语的划分根据该标签中所含的标签和文本进行，一个标签（不包括标签中的标签）或文本就是一个短语），所以该参数表示的是第一个短语。
 * `ulCountOfElements`
   表示该语义属性所覆盖的单词或短语元素数量。
-  在XML语法文本中，对于非`OPT`或`LIST`标签的语义属性来说，该语义属性可视为含有零个或多个单词的数组；而对于`OPT`或`LIST`标签的语义属性来说，则其可视为短语数组。
-  所以该参数值为其数组的大小。
+  和参数`ulFirstElement`一样，在XML语法文本中，该参数值为该语义属性对应的数组大小。
 * `pNextSibling`
   表示指向当前语义属性的下一个兄弟节点的指针。
+  在XML语法文本中，该参数的情况和结构体`SPPHRASE`中的参数`pProperties`类似，以此类推。
 * `pFirstChild`
   表示指向当前语义属性的第一个子节点的指针。
+  在XML语法文本中，该参数的情况和结构体`SPPHRASE`中的参数`pProperties`类似，以此类推。
 * `SREngineConfidence`
   表示由SR引擎计算的该语义属性的置信度。
   该参数值范围由SR引擎指定，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
@@ -1665,8 +1670,7 @@ if (SUCCEEDED(hr))
 
 `ISpRecoContext::SetVoicePurgeEvent`函数用于设置某些SR事件，这些事件的触发会终止与该上下文实例相关联的`ISpVoice`实例的音频输出并清除当前所有的朗读请求。
 
-上下文实例的感兴趣事件将会自动添加这些所设置的事件。
-可以使用函数`ISpRecoContext::GetVoicePurgeEvent`来获取这些事件。
+这些SR清除事件必须要是上下文实例的感兴趣事件，我们可以使用函数`ISpRecoContext::GetVoicePurgeEvent`来获取这些清除事件。
 
 程序可以使用函数`ISpRecoContext::GetVoice`来获取与之关联的`ISpVoice`实例，还可以设置SR引擎在接收到声音时(`SPEI_SOUND_START`事件)停止并清除TTS语音朗读。
 
@@ -2726,9 +2730,11 @@ HRESULT GetText(ULONG ulStart, ULONG ulCount, BOOL fUseTextReplacements, [annota
 **参数**
 
 * `ulStart`
-  [in] 该参数指定短语文本中要获取的第一个元素的位置。
+  [in] 该参数指定短语文本中要获取的第一个元素（元素可能是单词或短语，取决于该短语文本是一个短语还是多个短语的集合）的位置（从`0`开始）。
+  如果需要获取该短语文本的所有字符，该参数可以为枚举类型`SPPHRASERNG`中的`SPPR_ALL_ELEMENTS`成员（也就是`SP_GETWHOLEPHRASE`的宏定义）。
 * `ulCount`
-  [in] 该参数指定短语文本中要获取的元素数量。
+  [in] 该参数指定短语文本中要获取的元素（元素类型同`ulStart`）数量。
+  如果需要获取该短语文本的所有字符，该参数可以为枚举类型`SPPHRASERNG`中的`SPPR_ALL_ELEMENTS`成员（也就是`SP_GETWHOLEPHRASE`的宏定义）。
 * `fUseTextReplacements`
   [in] 该参数为布尔值，表示是否使用替换文本。
   比如，如果使用替换文本，则文本"write new check for twenty dollars"将会被替换为"write new check for $20"，关于替换的更多信息，详见[SR引擎指导书](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431799(v=vs.85))。
