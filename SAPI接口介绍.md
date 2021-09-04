@@ -1370,6 +1370,88 @@ struct SPPHRASEPROPERTY
   表示由SAPI计算的该语义属性的置信度。
   该参数值为`SP_LOW_CONFIDENCE`、`SP_NORMAL_CONFIDENCE`或`SP_HIGH_CONFIDENCE`中的一种，详见[SR引擎指南](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))中的[置信度得分及拒绝机制](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee431799(v=vs.85))。
 
+### 5.9 枚举类型SPCONTEXTSTATE
+
+**介绍**
+
+该枚举类型用于控制上下文实例的识别状态。
+
+以下是枚举类型`SPCONTEXTSTATE`的定义
+```c++
+typedef enum SPCONTEXTSTATE
+{
+  SPCS_DISABLED,
+  SPCS_ENABLED
+}SPCONTEXTSTATE;
+```
+
+**成员**
+
+* `SPCS_DISABLED`
+  指定与该上下文实例相关的所有语法都被禁用。
+  当程序将其上下文实例的识别状态设置为`SPCS_DISABLED`时，所有属于该上下文实例的语法中的语法规则都会被禁用，即使该语法为专有语法也是如此。
+* `SPCS_ENABLED`
+  指定与该上下文实例相关的所有语法都被启用。
+  此时所有属于该上下文实例的语法中的语法规则都会被恢复到被禁用之前的状态(也就是如果某规则在设置为`SPCS_DISABLED`之前的状态就是禁用状态，则使用`SPCS_ENABLED`之后仍为禁用状态)。
+  上下文实例的默认识别状态为`SPCS_ENABLED`状态。
+
+### 5.10 枚举类型SPRECOSTATE
+
+**介绍**
+
+该枚举类型用于控制SR引擎的状态。
+
+以下是枚举类型`SPRECOSTATE`的定义
+```c++
+typedef enum SPRECOSTATE
+{
+  SPRST_INACTIVE,
+  SPRST_ACTIVE,
+  SPRST_ACTIVE_ALWAYS,
+  SPRST_INACTIVE_WITH_PURGE,
+  SPRST_NUM_STATES
+}SPRECOSTATE;
+```
+
+**成员**
+
+* `SPRST_INACTIVE`
+  SR引擎和音频输入将会设置为未启动状态，且没有音频将会被接收，即使有激活的语法规则。音频设备在该状态将会被关闭。
+  正常情况下，程序不应该设置SR引擎为该状态，如果在使用分享型引擎，这会导致所有使用分享型引擎的程序停止语音识别。程序通常使用函数`ISpRecoContext::SetContextState`来禁止识别。
+* `SPRST_ACTIVE`
+  该状态为SR引擎的默认状态，该状态表示如果有任何激活的语法规则，则语音识别将会开始，音频将会被接收并传入SR引擎。
+* `SPRST_ACTIVE_ALWAYS`
+  该状态表示SR引擎已经启动而不管是否有激活的语法规则。音频将会被接收并传入SR引擎。
+  如果为了显示音量等级或者类似功能而想接收音量等级事件(`SPEI_SR_AUDIO_LEVEL`)，则将SR引擎设为该状态是很有用的。
+* `SPRST_INACTIVE_WITH_PURGE`
+  该状态表示将SR引擎设置为未启动，且所有已存在的音频数据会被清除。
+  如果为了快速关闭SR引擎而不想等待先存的音频数据处理完，则将SR引擎设为该状态是很有用的。
+  要注意当SR引擎为分享型时，该状态会影响到其他程序的语音识别。
+* `SPRST_NUM_STATES`
+  保留，以备未来使用。
+
+### 5.11 枚举类型SPLOADOPTIONS
+
+**介绍**
+
+该枚举类型用于显示语法该如何被加载，用于`ISpRecoGrammar`接口。
+
+以下是枚举类型`SPLOADOPTIONS`的定义
+```c++
+typedef enum SPLOADOPTIONS
+{
+  SPLO_STATIC,
+  SPLO_DYNAMIC
+}SPLOADOPTIONS;
+```
+
+**成员**
+
+* `SPLO_STATIC`
+  指定语法以静态类型加载。
+* `SPLO_DYNAMIC`
+  指定语法以动态类型加载。这也就意味着语法规则可以在程序运行期间被修改和提交。
+
 ## 6. ISpRecoContext接口的函数
 
 上下文接口`ISpRecoContext`继承了`ISpEventSource`接口，还有成员函数支持其关联不同的识别器与语法设置器。
@@ -1725,6 +1807,207 @@ if (SUCCEEDED(hr))
 }
 ```
 
+### 6.6 SetContextState函数
+
+**介绍**
+
+`ISpRecoContext::SetContextState`函数用于设置上下文实例的识别状态。该函数会根据所设的类型来改变当前上下文实例关联的语法中的语法规则状态。
+
+每个上下文实例的默认识别状态都为`SPCS_ENABLED`。
+
+程序可以使用该函数来切换该上下文实例的语法集，比如一个多文档界面程序，该程序的每个文档都有各自不同的上下文实例，此时该程序可以进行上下文切换来使每个文档获得或失去焦点。
+
+程序可以使用函数`ISpRecoContext::GetContextState`来查询对应上下文实例的识别状态。
+
+**函数原型**
+
+```c++
+HRESULT SetContextState(SPCONTEXTSTATE eContextState);
+```
+
+**参数**
+
+* `eContextState`
+  [in] 该参数接收表示上下文实例状态的`SPCONTEXTSTATE`枚举类型的成员。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+
+### 6.7 Pause函数
+
+**介绍**
+
+`ISpRecoContext::Pause`函数用于暂停底层SR引擎对象与SR引擎的同步。
+
+SR引擎在同步点进行暂停，此时可以允许语法以及语法规则状态进行自由的改变。SR引擎会保持暂停的状态直到函数`ISpRecoContext::Resume`被调用。
+
+每个调用的`ISpRecoContext::Pause`函数都必须调用一个`ISpRecoContext::Resume`函数来使其效果失效。
+
+暂停SR引擎将会停止该引擎的识别，不过暂停之后，音频输入流仍会继续被SAPI收集并储存在音频缓冲区中。
+当程序操作某些函数完毕后，需要调用`ISpRecoContext::Resume`函数来恢复SR引擎。SAPI会自动将音频缓冲区中的数据输入到恢复的SR引擎中以供其继续识别，这也防止实时音频数据丢失而造成用户体验不佳。
+
+然而，音频缓冲区有固定的大小限制（详见`ISpMMSysAudio::Read`），这是为了防止SAPI造成大量的内存消耗。因此，调用`ISpRecoContext::Pause`函数后只能维持较短的时间以供用户操作，如果时间过长，则会导致缓冲区溢出错误出现，程序可以通过设置`SPEI_END_SR_STREAM`为感兴趣的事件并检查`SPEVENT`结构的`LPARAM`值来侦测到该错误（详见[`CSpEvent::EndStreamResult`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee450675(v=vs.85))）。
+
+在最后一个`ISpRecoContext::Resume`函数被调用后，SAPI将会自动尝试去重新启动SR引擎的识别线程，因此，当缓冲区溢出错误出现时，音频数据会在该缓冲区中收集，所以此时输入流重新激活后，将会必然导致丢失数据，这将会对正在运行的语音识别以及SR引擎造成一定的负面影响。
+
+SR引擎根据音频流的分段时间来决定`ISpRecoContext::Pause`调用何时返回。当调用完成后，SR引擎根据所设置的等待时间参数对音频流进行分段（详见[语音识别引擎属性](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee431800(v=vs.85))）。
+
+在非常嘈杂的环境中，SR引擎可能难以分割音频流，导致长时间超时。如果你正在调用函数以响应用户操作，你可以考虑使用调用函数`ISpRecognizer::SetRecoState(SPRST_INACTIVE)`或者函数`ISpRecognizer::SetRecoState(SPRST_INACTIVE_WITH_PURGE)`，但切记这两个函数的操作是全局且及时的。
+
+**函数原型**
+
+```c++
+HRESULT Pause(DWORD dwFlags);
+```
+
+**参数**
+
+* `dwFlags`
+  [in] 预留参数，必须设置为`0`。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+
+**示例**
+
+以下示例说明了`ISpRecoContext::Pause`函数的使用：
+```c++
+// Declare local identifiers:
+HRESULT	                   hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+
+// Set up the recognition context.
+// ...
+
+// Pause the context so that event notifications are not received.
+hr = cpRecoContext->Pause(NULL);
+
+if (SUCCEEDED(hr))
+{
+   // Quickly perform the processing - see the
+   // Remarks section in ISpRecoContext::Pause.
+   // ...
+
+   hr = cpRecoContext->Resume(NULL);
+}
+
+
+// Applications will start receiving event notifications again.
+if (SUCCEEDED(hr))
+{
+   // Do stuff here.
+}
+```
+
+### 6.8 Resume函数
+
+**介绍**
+
+`ISpRecoContext::Resume`函数用于恢复暂停的SR引擎并重新启动识别进程。
+
+`ISpRecoContext::Resume`函数必须在调用了`ISpRecoContext::Pause`函数或者书签事件造成了SR引擎暂停或者自动暂停的语法规则（详见[`ISpRecoGrammar::SetRuleState`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413309(v=vs.85))）被识别之后进行调用。
+。
+
+每个调用的`ISpRecoContext::Pause`函数都必须调用一个`ISpRecoContext::Resume`函数来使其效果失效。
+
+**函数原型**
+
+```c++
+HRESULT Resume(DWORD dwReserved);
+```
+
+**参数**
+
+* `dwReserved`
+  [in] 预留参数，必须设置为`0`。
+
+**返回值**
+
+* `S_OK`
+* `E_INVALIDARG`
+
+**示例**
+
+以下示例说明了`ISpRecoContext::Resume`函数的使用，该示例在调用了`ISpRecoContext::Pause`函数后使用了`ISpRecoContext::Resume`函数：
+```c++
+// Declare local identifiers:
+HRESULT	                   hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+
+// Set up the recognition context.
+// ...
+
+// Pause the context so that event notifications are not received.
+hr = cpRecoContext->Pause(NULL);
+
+if (SUCCEEDED(hr))
+{
+   // Quickly perform the processing - see the
+   // Remarks section in ISpRecoContext::Pause.
+   // ...
+
+   hr = cpRecoContext->Resume(NULL);
+}
+
+// Applications will start receiving event notifications again.
+if (SUCCEEDED(hr))
+{
+   // Do stuff here.
+}
+```
+
+以下示例展示了`ISpRecoContext::Resume`函数和自动暂停的语法规则的组合使用：
+```c++
+// Declare local identifiers:
+HRESULT	                   hr = S_OK;
+CComPtr<ISpRecoContext>    cpRecoContext;
+CComPtr<ISpRecoGrammar>    cpRecoGrammar;
+const WCHAR                *MY_AUTOPAUSE_RULE = L"Rule1";
+const WCHAR                *MY_SECOND_RULE = L"Rule2";
+
+// Set up the recognition context and grammar.
+// ...
+
+// Activate a top-level rule as an "auto-pause" rule.
+hr = cpRecoGrammar->SetRuleState(MY_AUTOPAUSE_RULE, NULL, SPRS_ACTIVE_WITH_AUTO_PAUSE);
+
+if (SUCCEEDED(hr))
+{
+   // Get the recognition event for MY_AUTOPAUSE_RULE in a CSpEvent object.
+   // ...
+}
+
+// Assert that the recognition context paused
+// after the "auto-pause" rule was recognized.
+_ASSERT(spEvent.IsPaused());
+
+// Deactivate the "auto-pause" rule.
+hr = cpRecoGrammar->SetRuleState(MY_AUTOPAUSE_RULE, NULL, SPRS_INACTIVE);
+
+if (SUCCEEDED(hr))
+{
+   // Activate the second rule.
+   hr = cpRecoGrammar->SetRuleState(MY_SECOND_RULE, NULL, SPRS_ACTIVE);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Because the context was paused from the "auto-pause" rule,
+   // it must now be reactivated to recognize the second rule.
+   hr = cpRecoContext->Resume(NULL);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Get the second recognition...
+}
+```
+
 ## 7. ISpRecognizer接口的函数
 
 `ISpRecognizer`接口用于控制SR引擎的各个方面，一个识别器实例可以关联多个上下文(不过同一时间只能关联一个)。
@@ -1854,6 +2137,9 @@ if (SUCCEEDED(hr))
 如果一个使用共享型识别器的程序改变了该识别器状态，则会影响到所有使用该识别器的程序中的识别器状态。因此，程序在使用共享型识别器时，需要小心使用该函数。
 
 使用该函数改变识别器状态会导致`SPEI_RECO_STATE_CHANGE`事件的触发(对于设置该事件的实例来说)。
+
+要注意的是，SR引擎在启动状态(也就是`SPRST_ACTIVE`或者`SPRST_ACTIVE_ALWAYS`)时，不管是否处于暂停还是非暂停状态，都会识别所有从给定输入音频设备接收到的音频，包括`ISpVoice`实例输出的音频。
+这样就会导致SR引擎在启动时进行`ISpVoice`朗读就会导致SAPI识别自己发出的语音，造成识别干扰错误，所以在进行语音输出时，最好将SR引擎设为未启动状态或者将关联的上下文实例的语法设为禁用，否则可能会导致一些识别问题。
 
 **函数原型**
 
@@ -2509,6 +2795,173 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
         <P>...</P>
     </RULE>
 </GRAMMAR>
+```
+
+### 8.2 LoadCmdFromFile函数
+
+**介绍**
+
+`ISpRecoGrammar::LoadCmdFromFile`函数从指定的文件中加载SAPI5的C&C语法。该文件可以是已编译的二进制文件，也可以是未编译的文本文件。
+
+如果想要在加载了语法后修改该语法规则，则使用枚举类型值`SPLO_DYNAMIC`，否则就使用`SPLO_STATIC`。
+
+**函数原型**
+
+```c++
+HRESULT LoadCmdFromFile(LPCWSTR *pszFileName,
+ SPLOADOPTIONS Options);
+```
+
+**参数**
+
+* `pszFileName`
+  [in, string] 该参数为包含C&C语法的文件名。
+  SAPI5支持使用URL来加载已编译的静态语法。
+* `Options`
+  [in] 该参数为表示加载的语法是否能被动态修改的枚举类型`SPLOADOPTIONS`。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+
+### 8.3 SetRuleState函数
+
+**介绍**
+
+`ISpRecoGrammar::SetRuleState`函数用于激活或者禁用给定语法规则名的规则，该规则名区分大小写。
+
+该规则名是由创建该规则的XML文本中的`NAME`标签或者`ISpGrammarBuilder::GetRule`函数指定。
+
+程序可以使用状态，从而使得每次CFG语法开始被识别时，SR引擎就会暂停识别。程序必须使用函数[`ISpRecoContext::Resume`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413253(v=vs.85))继续进行SR引擎识别来防止输入音频的丢失（详见[`ISpSREngineSite::Read`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413385(v=vs.85))）或者音频缓冲区溢出（`SPERR_AUDIO_BUFFER_OVERFLOW`）。
+
+默认情况下，SR识别器对应的引擎状态为`SPRST_ACTIVE`，当一个或多个语法规则被激活时，语音识别就会启动，因此，如果不需要启动识别，则程序就不要激活语法规则。
+程序也可以禁用关联的上下文实例（详见[`ISpRecoContext::SetContextState`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413256(v=vs.85))）或者语法器实例（详见[`ISpRecoGrammar::SetGrammarState`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413307(v=vs.85))）来阻止SR引擎的启动。
+
+如果SR识别器对应的引擎状态为`SPRST_ACTIVE`时，当任意一个听写语法或者C&C语法规则被激活时，SAPI就会首先试图打开音频输入流，如果该音频设备已经被其他程序所使用，则音频输入流就会打开失败，失败代码将会由`ISpRecoGrammar::SetRuleState`函数返回，程序需要对该错误进行处理。
+
+如果程序使用的是进程内识别器时，该程序必须在启动识别(不管是不是由激活的语法规则所启动)前使用函数 `ISpRecognizer::SetInput`并传递一个非空的音频对象，而不管是否有多少个语法规则被激活。
+
+关于SAPI如何通知SR引擎，详见[`ISpSREngine::RuleNotify`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413405(v=vs.85))。
+
+**函数原型**
+
+```c++
+HRESULT SetRuleState(LPCWSTR pszName, void *pReserved, SPRULESTATE NewState);
+```
+
+**参数**
+
+* `pszName`
+  [in, string] 该参数为语法规则名，该名字是以空字符为结尾的字符串。
+  如果该参数为`NULL`且`ISpRecoGrammar`器关联的语法为SAPI5格式，则所有含有`SPRAF_TopLevel`和`SPRAF_Active`属性(这些属性必须是在规则创建时设置的)的规则都会受到该函数的影响。
+* `pReserved`
+  预留参数，不要使用，该参数必须为`NULL`。
+* `NewState`
+  该参数表示将要修改成的状态，为枚举类型`SPRULESTATE`。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+* `SP_STREAM_UNINITIALIZED`
+* `SPERR_UNINITIALIZED`
+* `SPERR_UNSUPPORTED_FORMAT`
+* `SPERR_NOT_TOPLEVEL_RULE`
+
+**示例**
+
+以下示例说明了`ISpRecoGrammar::SetRuleState`函数的使用，该实例先激活一个单一规则，然后马上又禁用了：
+```c++
+// Declare local identifiers:
+HRESULT                      hr = S_OK;
+CComPtr<ISpRecoContext>      cpRecoContext;
+CComPtr<ISpRecoGrammar>      cpRecoGrammar;
+ULONGLONG                    ullGramId = 1;
+// Create a grammar object.
+hr = cpRecoContext->CreateGrammar(ullGramId, &cpRecoGrammar;);
+if (SUCCEEDED(hr))
+{
+// Activate the rule.
+hr = cpRecoGrammar->SetRuleState(L"playcard", NULL, SPRS_ACTIVE);
+}
+if (SUCCEEDED(hr))
+{
+// Deactivate the rule.
+hr = cpRecoGrammar->SetRuleState(L"playcard", NULL, SPRS_INACTIVE);
+}
+```
+
+### 8.4 SetRuleIdState函数
+
+**介绍**
+
+`ISpRecoGrammar::SetRuleIdState`函数用于激活或者禁用给定语法规则ID的规则。
+
+该规则名是由创建该规则的XML文本中的`ID`标签或者`ISpGrammarBuilder::GetRule`函数指定。
+
+程序可以使用状态，从而使得每次CFG语法开始被识别时，SR引擎就会暂停识别。程序必须使用函数[`ISpRecoContext::Resume`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413253(v=vs.85))继续进行SR引擎识别来防止输入音频的丢失（详见[`ISpSREngineSite::Read`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413385(v=vs.85))）或者音频缓冲区溢出（`SPERR_AUDIO_BUFFER_OVERFLOW`）。
+
+默认情况下，SR识别器对应的引擎状态为`SPRST_ACTIVE`，当一个或多个语法规则被激活时，语音识别就会启动，因此，如果不需要启动识别，则程序就不要激活语法规则。
+程序也可以禁用关联的上下文实例（详见[`ISpRecoContext::SetContextState`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413256(v=vs.85))）或者语法器实例（详见[`ISpRecoGrammar::SetGrammarState`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413307(v=vs.85))）来阻止SR引擎的启动。
+
+如果SR识别器对应的引擎状态为`SPRST_ACTIVE`时，当任意一个听写语法或者C&C语法规则被激活时，SAPI就会首先试图打开音频输入流，如果该音频设备已经被其他程序所使用，则音频输入流就会打开失败，失败代码将会由`ISpRecoGrammar::SetRuleState`函数返回，程序需要对该错误进行处理。
+
+如果程序使用的是进程内识别器时，该程序必须在启动识别(不管是不是由激活的语法规则所启动)前使用函数 `ISpRecognizer::SetInput`并传递一个非空的音频对象，而不管是否有多少个语法规则被激活。
+
+关于SAPI如何通知SR引擎，详见[`ISpSREngine::RuleNotify`](https://docs.microsoft.com/zh-cn/previous-versions/windows/desktop/ee413405(v=vs.85))。
+
+**函数原型**
+
+```c++
+HRESULT SetRuleIdState(ULONG ulRuleId, SPRULESTATE NewState);
+```
+
+**参数**
+
+* `ulRuleId`
+  [in] 该参数为指定的语法规则ID标识符。
+  如果该参数为`0`且`ISpRecoGrammar`器关联的语法为SAPI5格式，则所有含有`SPRAF_TopLevel`和`SPRAF_Active`属性(这些属性必须是在规则创建时设置的)的规则都会受到该函数的影响。
+* `NewState`
+  该参数表示将要修改成的状态，为枚举类型`SPRULESTATE`。
+
+**返回值**
+
+* `S_OK`
+* `S_FALSE`
+* `E_INVALIDARG`
+* `SP_STREAM_UNINITIALIZED`
+* `SPERR_UNINITIALIZED`
+* `SPERR_UNSUPPORTED_FORMAT`
+* `SPERR_DEVICE_BUSY`
+* `SPERR_NOT_TOPLEVEL_RULE`
+
+**示例**
+
+以下示例说明了`ISpRecoGrammar::SetRuleIdState`函数的使用：
+```c++
+// Declare local identifiers:
+HRESULT                      hr = S_OK;
+CComPtr<ISpRecoGrammar>      cpRecoGrammar;
+SPSTATEHANDLE                hState;
+
+// Create a new rule.
+hr = cpRecoGrammar->GetRule(L"Travel", 1, SPRAF_TopLevel | SPRAF_Active, TRUE, &hState;);
+
+if (SUCCEEDED(hr))
+{
+   // ... Add word transitions ...
+
+   // Activate the rule by its Id.
+   hr = cpRecoGrammar->SetRuleIdState(1, SPRS_ACTIVE);
+}
+
+if (SUCCEEDED(hr))
+{
+   // Do stuff here.
+}
 ```
 
 ## 9. ISpRecoResult接口的函数
