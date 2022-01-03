@@ -1267,7 +1267,8 @@ typedef struct SPPHRASE
 * `wReserved`
   保留给未来使用。
 * `ullGrammarID`
-  表示用于识别该语句的主规则ID。
+  表示用于识别该语句的主规则的ID。
+  该参数可由XML语法文本中该规则的`RULE`标签中的`ID`属性来设置。
 * `ftStartTime`
   表示基于Win32 API、`SystemTimeToFileTime`和`GetSystemTime`作为64位值的该语句音频开始的绝对时间。
   当应用程序使用wav文件输入时，SAPI将流位置和开始时间信息设置为零。
@@ -2698,7 +2699,7 @@ SAPI中定义了一些特殊的标签、属性名和特殊符号来识别XML文�
 
   `GRAMMAR`标签通常包含：
   * 一个`LANGID`属性，用于表示该语法文本所识别的语音类型（表示识别中文或英文等，中文的属性值为`804`，英文为`409`）。
-  * 零个或多个`DEFINE`和`RULE`标签。
+  * 零个或多个`DEFINE`和`RULE`标签，其中如果有多个`RULE`标签，则每个显式指定了`ID`属性的`RULE`标签中的`ID`属性值不能相同，否则出错。
   ```xml
   <!-- 该GRAMMAR标签含有1个DEFINE元素，2个RULE元素
   该GRAMMAR标签所表示的语法可以识别以下中文语句：
